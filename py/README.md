@@ -64,7 +64,7 @@ This means you're into your virtual environment and every script you will call w
 
 ## 3. Install needed packages
 
-Now you must install all the packages needed to run Baselines.
+Now you must install all the packages needed to run Baselines, be sure you run these commands from the newly created virtual environment:
 
 ### Tensorflow
 ```bash
