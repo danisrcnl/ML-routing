@@ -29,7 +29,7 @@ sudo apt install ffmpeg
 
 ## 2. Create a virtual environment
 
-A virtual environment is strongly recommended, since Baselines is going to work with an older version of Tensorflow (1.14). Thus you need to install packages releases which are older than the ones you may have installed on your device due to other usage purposes. An isolated environment is going to guarantee that everything will work.
+A virtual environment is strongly recommended, since the stable version of Baselines I adopted is going to work with an older version of Tensorflow (1.14). Thus you need to install packages releases which are older than the ones you may have installed on your device due to other usage purposes. An isolated environment is going to guarantee that everything will work.
 
 The first thing you need to do is to install **virtualenv** package:
 ```bash
