@@ -1,5 +1,33 @@
 # p4 module
 
+Base P4-utils code used to support custom extern implementation has been provided by [this repository](https://github.com/engjefersonsantiago/p4-programs).
+
+All the information you need to install it are below.
+
+## How to install
+
+- inside **bmv2**
+```bash
+cd bmv2
+./autogen.sh
+./configure
+make -j4
+sudo make install
+```
+
+- inside **p4c**
+```bash
+./bootstrap.sh
+cd build
+make -j4
+sudo make install
+```
+
+- inside **p4c-bmv2**
+```bash
+pip install -r requirements_v1_1.txt
+```
+
 ## Custom extern implementation step by step
 
 Be sure you're using p4c and bmv2 modules from this repository, as they've been modified right to support JSON generation of custom externs, which is not natively supported by p4.
@@ -139,13 +167,6 @@ apply {
 ```
 
 ### 6. Compile the application
-If you haven't already compiled and installed p4c contained in this repository do it:
-```bash
-cd p4c/build
-sudo make -j4
-sudo make install
-```
-
 Now you can obtain the JSON of your application by simply compiling it by means of p4c-bm2-ss
 ```bash
 p4c-bm2-ss myapp.p4 -o myapp.json
