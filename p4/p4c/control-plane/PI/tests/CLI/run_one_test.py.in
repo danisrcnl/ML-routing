@@ -1,0 +1,218 @@
+#!/usr/bin/env python2
+
+# Copyright 2013-present Barefoot Networks, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+#
+# Antonin Bas (antonin@barefootnetworks.com)
+#
+#
+
+import sys
+import subprocess
+import os
+import time
+import random
+import re
+import StringIO
+import tempfile
+
+sswitch_path = "@BM_SIMPLE_SWITCH@"
+CLI_path = os.path.join("@abs_top_builddir@", "CLI", "pi_CLI_rpc")
+rpc_server_path = os.path.join("@abs_top_builddir@", "bin", "pi_rpc_server")
+valgrind_supp = os.path.join("@abs_srcdir@", "test.supp")
+
+# Class written by Mihai Budiu, for Barefoot Networks, Inc.
+class ConcurrentInteger(object):
+    # Generates exclusive integers in a range 0-max
+    # in a way which is safe across multiple processes.
+    # It uses a simple form of locking using folder names.
+    # This is necessary because this script may be invoked
+    # concurrently many times by make, and we need the many simulator instances
+    # to use different port numbers.
+    def __init__(self, folder, max):
+        self.folder = folder
+        self.max = max
+    def lockName(self, value):
+        return "lock_" + str(value)
+    def release(self, value):
+        os.rmdir(self.lockName(value))
+    def generate(self):
+        # try 10 times
+        for i in range(0, 10):
+            index = random.randint(0, self.max)
+            file = self.lockName(index)
+            try:
+                os.makedirs(file)
+                os.rmdir(file)
+                return index
+            except:
+                time.sleep(1)
+                continue
+        return None
+
+def process_valgrind_output(stderr, name):
+    f_name = None
+    v = None
+    with tempfile.NamedTemporaryFile(delete=False) as f:
+        print "Valgrind output for", name, "written to", f.name
+        f_name = f.name
+        while True:
+            L = stderr.readline()
+            f.write(L)
+            if "ERROR SUMMARY" in L:
+                m = re.search("ERROR SUMMARY: ([0-9]*) errors "
+                              "from ([0-9]*) contexts", L)
+                assert(m.lastindex == 2)
+                v = (int(m.group(1)) == 0) and (int(m.group(2)) == 0)
+                break
+    if v:  # success, we can remove files
+        os.remove(f_name)
+    return v
+
+def main():
+    def fail_msg(msg):
+        print msg
+        sys.exit(1)
+
+    if len(sys.argv) != 4:
+        fail_msg("Invalid number of arguments")
+
+    testdata_dir = sys.argv[1]
+    testname = sys.argv[2]
+    jsonname = sys.argv[3]
+
+    command_path = os.path.join(testdata_dir, testname + ".in")
+    output_path = os.path.join(testdata_dir, testname + ".out")
+    json_path = os.path.join(testdata_dir, jsonname)
+
+    concurrent = ConcurrentInteger(os.getcwd(), 1000)
+    rand = concurrent.generate()
+    if rand is None:
+        fail_msg("Error when generating random port number")
+    thrift_port = str(9090 + rand)
+    device_id = str(rand)
+
+    rpc_path = "/tmp/pi_rpc_{}.ipc".format(rand)
+    rpc_addr = "ipc://{}".format(rpc_path)
+
+    # start simple_switch
+    simple_switch_p = subprocess.Popen(
+        [sswitch_path, json_path, "--thrift-port", thrift_port,
+         "--device-id", device_id, "--", "--enable-swap"],
+        stdout=subprocess.PIPE)
+    bmv2_notifications_rpc_path = "/tmp/bmv2-{}-notifications.ipc".format(
+        device_id)
+
+    with_valgrind = (os.getenv("PI_TEST_WITH_VALGRIND") != None)
+    valgrind_with_options = ["valgrind"]
+    # third-party code shows memory leaks
+    # valgrind_with_options += ["--leak-check=full", "--show-reachable=yes"]
+    valgrind_with_options += ["--suppressions={}".format(valgrind_supp)]
+
+    # Valgrind output is sent to stderr, which we will analyze later
+
+    if with_valgrind:
+        rpc_server_cmd = ["libtool", "--mode=execute"] + valgrind_with_options
+    else:
+        rpc_server_cmd = []
+    rpc_server_cmd += [rpc_server_path]
+    rpc_server_p = subprocess.Popen(rpc_server_cmd + ["-a", rpc_addr],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+
+    def remove_rpc():
+        try:
+            os.remove(rpc_path)
+        except:
+            pass
+        try:
+            os.remove(bmv2_notifications_rpc_path)
+        except:
+            pass
+
+    def fail(msg):
+        rpc_server_p.terminate()
+        simple_switch_p.terminate()
+        remove_rpc()
+        fail_msg(msg)
+
+    time.sleep(1)
+
+    if with_valgrind:
+        cmd = ["libtool", "--mode=execute"] + valgrind_with_options
+    else:
+        cmd = []
+    cmd += [CLI_path, "-c", os.path.abspath(json_path), "-a", rpc_addr]
+    input_ = "assign_device 0 -- port={}\n".format(thrift_port)
+    with open(command_path, "r") as f:
+        input_ += f.read()
+
+    out = None
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, cwd=testdata_dir)
+
+    out, stderr = p.communicate(input_)
+
+    rc = p.returncode
+
+    if rc:
+        print out
+        print stderr
+        fail("CLI returned error code")
+
+    assert(out)
+    # print out
+
+    def parse_data(s, pattern):
+        # m = re.findall("{}.*\n(.*)\n(?={})".format(pattern, pattern), s)
+        # Note how the second \n is optional (\n?), this is to accomodate
+        # commands with an empty output
+        m = re.findall("{}[^\n]*\n(.*?)\n?(?={})".format(pattern, pattern), s,
+                       re.DOTALL)
+        return m
+
+    out_parsed = parse_data(out, "PI CLI> ")
+
+    with open(output_path, "r") as f:
+        expected_parse = parse_data(f.read(), "\?\?\?\?")
+        if len(out_parsed) != len(expected_parse):
+            print out_parsed
+            print "****************"
+            fail("Mismatch between expected output and actual output")
+        for o, e in zip(out_parsed, expected_parse):
+            if o != e:
+                print o
+                print "****************"
+                print e
+                fail("Mismatch between expected output and actual output")
+
+    # terminate gives the process a chance to flush to the file
+    rpc_server_p.terminate()
+    simple_switch_p.terminate()
+    # apparently, there is no issue with me reading from the PIPE after
+    # terminated the process
+    if with_valgrind:
+        v1 = process_valgrind_output(StringIO.StringIO(stderr), "RPC CLI")
+        v2 = process_valgrind_output(rpc_server_p.stderr, "RPC server")
+
+        if (not v1) or (not v2):
+            fail_msg("Detected valgrind error(s)")
+    remove_rpc()
+
+    sys.exit(0)
+
+if __name__ == '__main__':
+    main()

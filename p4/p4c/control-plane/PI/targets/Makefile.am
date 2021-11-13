@@ -1,0 +1,13 @@
+ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS} -I m4
+
+if WITH_BMV2
+MAYBE_BMV2 = bmv2
+endif
+
+if WITH_INTERNAL_RPC
+MAYBE_RPC = rpc
+endif
+
+SUBDIRS = dummy $(MAYBE_RPC) $(MAYBE_BMV2)
+
+DIST_SUBDIRS = dummy rpc $(MAYBE_BMV2)
