@@ -4,7 +4,7 @@ Base P4-utils code used to support custom extern implementation has been provide
 
 All the information you need to install it are below.
 
-## Summary
+## Table of contents
 - [How to install](#how-to-install)
 - [Custom extern implementation step by step](#custom-extern-implementation-step-by-step)
 
