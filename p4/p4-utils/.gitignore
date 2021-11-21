@@ -1,0 +1,33 @@
+# Python byte code
+*.pyc
+
+# Emacs
+*~
+ls
+
+# Compiled JSON
+*.json
+!*p4app*.json
+
+# P4 files
+*p4i
+*p4rt
+
+# Logs and dumps
+log*/
+*.pcap
+
+*.egg-info/
+
+*mxexec.1
+*mxexec
+
+flows/
+*.csv
+
+# Docs hidden files
+docs/.doctrees
+
+# Packer auto generated files
+vm/packer_cache
+vm/output-*
