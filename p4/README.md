@@ -32,6 +32,8 @@ sudo make install
 pip install -r requirements_v1_1.txt
 ```
 
+- inside **p4-utils**: look at p4utils/README.md
+
 ## Custom extern implementation step by step
 
 Be sure you're using p4c and bmv2 modules from this repository, as they've been modified right to support JSON generation of custom externs, which is not natively supported by p4.
