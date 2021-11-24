@@ -32,7 +32,10 @@ sudo make install
 pip install -r requirements_v1_1.txt
 ```
 
-- inside **p4-utils**: look at p4utils/README.md
+- inside **p4-utils**:
+```bash
+./install.sh
+```
 
 ## Custom extern implementation step by step
 
@@ -177,3 +180,5 @@ Now you can obtain the JSON of your application by simply compiling it by means 
 ```bash
 p4c-bm2-ss myapp.p4 -o myapp.json
 ```
+
+If you want an easily executable example, just move to the directory *examples/custom_extern*.
