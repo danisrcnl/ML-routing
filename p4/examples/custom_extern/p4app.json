@@ -2,7 +2,7 @@
   "program": "custom_extern.p4",
   "switch": "simple_switch",
   "compiler": "p4c-bm2-ss",
-  "options": "-o reflector.json",
+  "options": "-o custom_extern.json",
   "switch_cli": "simple_switch_CLI",
   "cli": true,
   "pcap_dump": false,
