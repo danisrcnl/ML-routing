@@ -1,7 +1,6 @@
 #include <chrono>
 
 #include <bm/bm_sim/extern.h>
-#include <rohc/rohc_compressor_module.h>
 
 using namespace std;
 
