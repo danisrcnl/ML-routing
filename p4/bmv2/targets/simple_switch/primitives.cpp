@@ -25,8 +25,6 @@
 #include <bm/bm_sim/meters.h>
 #include <bm/bm_sim/packet.h>
 #include <bm/bm_sim/phv.h>
-#include <rohc/rohc_compressor_module.h>
-#include <rohc/rohc_decompressor_module.h>
 
 #include <random>
 #include <thread>
