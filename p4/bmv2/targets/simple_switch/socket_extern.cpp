@@ -15,6 +15,8 @@
 #define PORT "1500"
 #define IP "0.0.0.0"
 
+#define SE_LOG "[socket_extern.cpp] "
+
 using namespace std;
 
 
@@ -29,26 +31,39 @@ using bm::ExternType;
 class SocketExtern : public ExternType {
  public:
     BM_EXTERN_ATTRIBUTES {
+      BM_EXTERN_ATTRIBUTE_ADD(data);
     }
 
   // Init variables
     void init() override {
-        std::cout << "socket_extern init called" << std::endl;
+        std::cout << SE_LOG << "socket_extern init called" << std::endl;
     }
 
-    Data sendData(const Data& data) {
+    void sendData(const Data& data) {
+        std::cout << SE_LOG << "socket_extern.sendData received: [" << data.get<int>() << "]" << std::endl;
         createConnection();
         objectData *pointer = (objectData*) malloc(sizeof(objectData));
         Data d = static_cast<Data>(sendValue(pointer, data.get<int>()));
         free(pointer);
         closeConnection();
-        return d;
+        this->data = d;
+    }
+
+    void getData(Data& data) {
+        data = this->data;
+    }
+
+    void printData(const Data& data) {
+      std::cout << SE_LOG << "socket_extern.printData gave: [" << data.get<int>() << "]" << std::endl;
     }
 
     // Default constructor/destructor
     virtual ~SocketExtern () {}
 
 private:
+
+    Data data;
+
     typedef struct objectData_struct {
         unsigned int value;
     } objectData;
@@ -60,7 +75,7 @@ private:
 
     void createConnection() {
 
-        cout << "Into createConnection()" << endl;
+        cout << SE_LOG << "Into createConnection()" << endl;
 
         /* Create a socket point */
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -68,21 +83,21 @@ private:
         if (sockfd < 0) {
             throw std::runtime_error("error opening socket");
         } else if (sockfd > 0) {
-            cout << "SOCKET OPENED" << endl;
+            cout << SE_LOG << "SOCKET OPENED" << endl;
         }
 
         serv_addr.sin_family = AF_INET;
         serv_addr.sin_port = htons(atoi(PORT));
         inet_pton(AF_INET, IP, &(serv_addr.sin_addr.s_addr));
 
-        cout << "attempting to connect to server" << endl;
+        cout << SE_LOG << "attempting to connect to server" << endl;
 
         int conn_success = connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
 
         if (conn_success < 0) {
             throw std::runtime_error("couldn't connect");
         } else {
-            cout << "connection successful" << endl;
+            cout << SE_LOG << "connection successful" << endl;
         }
 
     }
@@ -93,7 +108,7 @@ private:
 
     int sendValue(objectData* a, int number) {
 
-        cout << "into sendValue()" << endl;
+        cout << SE_LOG << "into sendValue()" << endl;
 
         fd_set fds;
         struct timeval tv;
@@ -111,7 +126,6 @@ private:
 
         while ((recv(sockfd, buffer, sizeof(buffer), 0)) <= 0);
         a = reinterpret_cast<objectData*>(buffer);
-        cout << a->value << endl;
 
         return a->value;
     }
@@ -119,6 +133,8 @@ private:
 
 BM_REGISTER_EXTERN(SocketExtern);
 BM_REGISTER_EXTERN_METHOD(SocketExtern, sendData, const Data &);
+BM_REGISTER_EXTERN_METHOD(SocketExtern, getData, Data &);
+BM_REGISTER_EXTERN_METHOD(SocketExtern, printData, const Data &);
 
 // End Declaration
 
