@@ -11,7 +11,8 @@ noinst_LTLIBRARIES = libsimpleswitch.la
 libsimpleswitch_la_SOURCES = \
 simple_switch.cpp simple_switch.h primitives.cpp \
 custom_extern.cpp \
-socket_extern.cpp 
+socket_extern.cpp \
+test_addresses_extern.cpp
 
 libsimpleswitch_la_LIBADD = \
 $(top_builddir)/src/bm_sim/libbmsim.la \

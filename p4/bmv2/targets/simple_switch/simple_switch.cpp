@@ -64,6 +64,8 @@ REGISTER_HASH(bmv2_hash);
 
 extern int import_primitives();
 extern int import_custom_extern();
+extern int import_socket_extern();
+extern int import_test_addresses_extern();
 
 SimpleSwitch::SimpleSwitch(int max_port, bool enable_swap)
   : Switch(enable_swap),
@@ -110,6 +112,8 @@ SimpleSwitch::SimpleSwitch(int max_port, bool enable_swap)
 
   import_primitives();
   import_custom_extern();
+  import_socket_extern();
+  import_test_addresses_extern();
 }
 
 #define PACKET_LENGTH_REG_IDX 0
