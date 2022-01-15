@@ -76,7 +76,6 @@ public:
   }
 
   int push(uint32_t address) {
-    if (address == 0) return -1;
     lock_guard<mutex> lk(futureDestinations_mutex);
     int pos = nextPos % CBufferSize;
     if (pos == head && validElements != 0) {
@@ -145,21 +144,16 @@ class TestAddressesExtern : public ExternType {
     c.show();
   }
 
-  void pushAddr(const Data& address, Data& pos, Data& valid_bool) {
+  void pushAddr(const Data& address, Data& pos, const Data& valid_bool) {
+    if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
+      return;
     cout << LOG << "push called for address " << showAddr(address.get<uint32_t>()) << endl;
     int ret = c.push(address.get<uint32_t>());
-    int val = 1;
-    if (ret == -1) {
-      val = 0;
-      ret = 0;
-      return;
-    }
-    valid_bool = static_cast<Data>(val);
     pos = static_cast<Data>(ret);
   }
 
   void popAddr(const Data& pos, const Data& valid_bool) {
-    if (valid_bool.get<int>() == 0)
+    if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
     cout << LOG << "pop called for element at pos = " << pos.get<int>() << endl;
     c.pop(pos.get<int>());
@@ -172,14 +166,14 @@ private:
 
   char* showAddr(uint32_t ip) {
     struct in_addr ip_addr;
-    ip_addr.s_addr = ip;
+    ip_addr.s_addr = htonl(ip);
     return inet_ntoa(ip_addr);
   }
 };
 
 BM_REGISTER_EXTERN(TestAddressesExtern);
 BM_REGISTER_EXTERN_METHOD(TestAddressesExtern, print);
-BM_REGISTER_EXTERN_METHOD(TestAddressesExtern, pushAddr, const Data&, Data&, Data&);
+BM_REGISTER_EXTERN_METHOD(TestAddressesExtern, pushAddr, const Data&, Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(TestAddressesExtern, popAddr, const Data&, const Data&);
 
 int import_test_addresses_extern() {
