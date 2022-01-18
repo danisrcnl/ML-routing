@@ -1,13 +1,16 @@
 #include <bm/bm_sim/extern.h>
+#include <unistd.h>
 #include <iostream>
 #include <array>
 #include <mutex>
 #include <cinttypes>
+#include <thread>
+#include <chrono>
 #include <arpa/inet.h>
 
 #define PORT "1500"
 #define IP "0.0.0.0"
-#define LOG "[test_addresses_extern.cpp] "
+#define LOG "[MLController.cpp] "
 #define CBufferSize 100
 
 using namespace std;
@@ -129,7 +132,7 @@ using bm::Header;
 using bm::PHV;
 using bm::ExternType;
 
-class TestAddressesExtern : public ExternType {
+class MLController : public ExternType {
  public:
 
   BM_EXTERN_ATTRIBUTES {
@@ -137,6 +140,11 @@ class TestAddressesExtern : public ExternType {
 
   void init() override {
     cout << LOG << "init called" << endl;
+  }
+
+  void simulate_computation () {
+    cout << LOG << "simulate_computation called" << endl;
+    sleep(1);
   }
 
   void print() {
@@ -159,7 +167,7 @@ class TestAddressesExtern : public ExternType {
     c.pop(pos.get<int>());
   }
 
-  virtual ~TestAddressesExtern () {}
+  virtual ~MLController () {}
 
 private:
   ConcurrentCBuffer c;
@@ -171,11 +179,12 @@ private:
   }
 };
 
-BM_REGISTER_EXTERN(TestAddressesExtern);
-BM_REGISTER_EXTERN_METHOD(TestAddressesExtern, print);
-BM_REGISTER_EXTERN_METHOD(TestAddressesExtern, pushAddr, const Data&, Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(TestAddressesExtern, popAddr, const Data&, const Data&);
+BM_REGISTER_EXTERN(MLController);
+BM_REGISTER_EXTERN_METHOD(MLController, simulate_computation);
+BM_REGISTER_EXTERN_METHOD(MLController, print);
+BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&);
 
-int import_test_addresses_extern() {
+int import_ml_controller() {
   return 0;
 }
