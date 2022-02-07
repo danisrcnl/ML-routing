@@ -12,7 +12,10 @@ libsimpleswitch_la_SOURCES = \
 simple_switch.cpp simple_switch.h primitives.cpp \
 custom_extern.cpp \
 socket_extern.cpp \
-MLController.cpp
+MLController.cpp \
+address.h \
+pymodule.h \
+ccbuffer.h
 
 libsimpleswitch_la_LIBADD = \
 $(top_builddir)/src/bm_sim/libbmsim.la \
