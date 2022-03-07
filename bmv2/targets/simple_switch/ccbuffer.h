@@ -14,7 +14,7 @@
 
 #define PORT "1500"
 #define IP "0.0.0.0"
-#define LOG "[ccbuffer.h] "
+#define LOG_ccb "[ccbuffer.h] "
 #define CBufferSize 100
 using namespace std;
 
