@@ -90,6 +90,8 @@ public:
   }
 
   int getHead() { return head; }
+
+  int currElems() { return validElements; }
 };
 
 #endif

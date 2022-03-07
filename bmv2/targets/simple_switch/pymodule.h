@@ -74,7 +74,7 @@ public:
     int written = sprintf(ptr, "%s ", "GETP");
     ptr += written;
     totw += written;
-    written = sprintf(ptr, "%d ", CBufferSize);
+    written = sprintf(ptr, "%d ", c.currElems());
     ptr += written;
     totw += written;
     written = sprintf(ptr, "%d ", address);
