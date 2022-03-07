@@ -8,6 +8,7 @@
 #include <chrono>
 #include <arpa/inet.h>
 #include "pymodule.h"
+#include "rewardsQ.h"
 
 #define PORT "1500"
 #define IP "0.0.0.0"
@@ -59,22 +60,21 @@ class MLController : public ExternType {
     c.pop(pos.get<int>());
   }
 
-  void getOutputPort(const Data& pos, const Data& valid_bool, Data& sockfd, Data& outPort) {
+  void getOutputPort(const Data& pos, const Data& valid_bool, Data& outPort) {
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
     cout << LOG << "sending socket request to get output port" << endl;
-    int s = sockfd.get<int>();
-    int port = py.getPort(s, c.get(pos.get<int>()), c);
-    sockfd = static_cast<Data>(s);
+    uint32_t lastRw = rewards.pop();
+    int port = py.getPort(c.get(pos.get<int>()), lastRw, c);
     outPort = static_cast<Data>(port);
   }
 
-  void sendReward(const Data& valid_bool, const Data& sockfd, const Data& qtime) {
+  void sendReward(const Data& valid_bool, const Data& qtime) {
     // qtime will be bit<32> deq_timedelta in p4
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
-    cout << LOG << "sending reward (q time) over socket" << endl;
-    py.sendReward(sockfd.get<int>(), qtime.get<uint32_t>());
+    cout << LOG << "storing reward in rws queue" << endl;
+    rewards.push(qtime.get<uint32_t>());
   }
 
   virtual ~MLController () {}
@@ -82,6 +82,7 @@ class MLController : public ExternType {
 private:
   ConcurrentCBuffer c;
   PyModule py;
+  RewardsQ rewards;
 
   char* showAddr(uint32_t ip) {
     struct in_addr ip_addr;
@@ -95,8 +96,8 @@ BM_REGISTER_EXTERN_METHOD(MLController, simulate_computation);
 BM_REGISTER_EXTERN_METHOD(MLController, print);
 BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, Data&, Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&);
 
 int import_ml_controller() {
   return 0;
