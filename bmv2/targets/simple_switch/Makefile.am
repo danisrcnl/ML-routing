@@ -15,7 +15,8 @@ socket_extern.cpp \
 MLController.cpp \
 address.h \
 pymodule.h \
-ccbuffer.h
+ccbuffer.h \
+rewardsQ.h
 
 libsimpleswitch_la_LIBADD = \
 $(top_builddir)/src/bm_sim/libbmsim.la \
