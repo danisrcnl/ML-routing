@@ -38,6 +38,10 @@ struct standard_metadata_t {
     bit<1>  drop;
     bit<16> recirculate_port;
     bit<32> packet_length;
+    bit<32> enq_timestamp;
+    bit<19> enq_qdepth;
+    bit<32> deq_timedelta;
+    bit<19> deq_qdepth;
 }
 
 extern Checksum16 {
