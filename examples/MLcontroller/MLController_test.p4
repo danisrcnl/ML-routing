@@ -76,7 +76,7 @@ control MyEgress(inout headers hdr,
 
     apply {
         popAddress();
-        ml_controller.sendReward(meta.valid_bool, 1);
+        ml_controller.sendReward(meta.valid_bool, standard_metadata.deq_timedelta);
     }
 }
 
