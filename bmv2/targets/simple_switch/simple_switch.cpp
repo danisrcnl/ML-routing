@@ -243,11 +243,11 @@ SimpleSwitch::enqueue(int egress_port, std::unique_ptr<Packet> &&packet) {
 
     PHV *phv = packet->get_phv();
 
-    if (with_queueing_metadata) {
-      phv->get_field("queueing_metadata.enq_timestamp").set(get_ts().count());
-      phv->get_field("queueing_metadata.enq_qdepth")
+    //if (with_queueing_metadata) {
+      phv->get_field("standard_metadata.enq_timestamp").set(get_ts().count());
+      phv->get_field("standard_metadata.enq_qdepth")
           .set(egress_buffers.size(egress_port));
-    }
+    //}
 
 #ifdef SSWITCH_PRIORITY_QUEUEING_ON
     size_t priority =
@@ -285,12 +285,13 @@ SimpleSwitch::check_queueing_metadata() {
   bool deq_timedelta_e = field_exists("queueing_metadata", "deq_timedelta");
   bool deq_qdepth_e = field_exists("queueing_metadata", "deq_qdepth");
   if (enq_timestamp_e || enq_qdepth_e || deq_timedelta_e || deq_qdepth_e) {
+    std::cout << "one is true" << std::endl;
     if (enq_timestamp_e && enq_qdepth_e && deq_timedelta_e && deq_qdepth_e)
       with_queueing_metadata = true;
     else
       bm::Logger::get()->warn(
           "Your JSON input defines some but not all queueing metadata fields");
-  }
+  } else std::cout << "none is true" << std::endl;
 }
 
 // Timers
@@ -484,14 +485,14 @@ SimpleSwitch::egress_thread(size_t worker_id) {
 
     phv = packet->get_phv();
 
-    if (with_queueing_metadata) {
+    //if (with_queueing_metadata) {
       auto enq_timestamp =
-          phv->get_field("queueing_metadata.enq_timestamp").get<ts_res::rep>();
-      phv->get_field("queueing_metadata.deq_timedelta").set(
+          phv->get_field("standard_metadata.enq_timestamp").get<ts_res::rep>();
+      phv->get_field("standard_metadata.deq_timedelta").set(
           get_ts().count() - enq_timestamp);
-      phv->get_field("queueing_metadata.deq_qdepth").set(
+      phv->get_field("standard_metadata.deq_qdepth").set(
           egress_buffers.size(port));
-    }
+    //}
 
     phv->get_field("standard_metadata.egress_port").set(port);
 
