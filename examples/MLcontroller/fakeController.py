@@ -3,15 +3,6 @@ import struct
 import itertools
 
 PORT, HOST_IP = 1500, '0.0.0.0'
-key = 4
-queue = []
-
-class Item:
-    id_iter = 0
-    def __init__(self, value):
-        self.value = value
-        self.id = Item.id_iter
-        Item.id_iter += 1
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -53,7 +44,7 @@ def parse_req(data):
         for i in range(4, max):
             destinations.pushDst(parsed[i])
         print("Last reward:", lastRw)
-        destinations.printL()
+        destinations.show()
 
 
 class FutureDestinations:
@@ -71,7 +62,7 @@ class FutureDestinations:
     def setCurDst(self, dst):
         self.curDst = int(dst)
 
-    def printL(self):
+    def show(self):
         print("Number of future destinations:", self.size)
         print("Current destination:", self.curDst)
         print("List of future destinations:")
