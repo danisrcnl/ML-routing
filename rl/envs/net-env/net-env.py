@@ -55,6 +55,8 @@ class State:
     def setDsts (self, destinations):
         self.destinations = destinations
         self.prevActions = getActions(self.destinations.getCurDst())
+    def getCurDst (self):
+        return self.destinations.getCurDst()
     def show (self):
         print("Future destinations: ")
         self.destinations.printL()
@@ -116,6 +118,7 @@ class NetEnv (gym.Env):
         # send action back on socket
         # store action in action history
         ret = action
+        addAction(self.state.getCurDst(), action)
         sendBack = struct.pack('I', ret)
         self.conn.sendall(sendBack)
 
