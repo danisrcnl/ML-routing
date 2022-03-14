@@ -99,23 +99,58 @@ class NetEnv (gym.Env):
         self.action_space = spaces.Discrete(NPORTS)
         self.observation_space = spaces.Box(STATE_FEATURES)
         self.state = State()
+        self.pkt = Packet()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            self.s = s
+            self.s.bind((HOST_IP, PORT))
+            self.s.listen()
+            while True:
+                print("listening...")
+                self.conn, self.addr = self.s.accept()
+                print("connected by", addr)
+                return
 
     def step (self, action):
         # action contains the # of the port the packet must be forwarded to
 
         # send action back on socket
         # store action in action history
+        ret = action
+        sendBack = struct.pack('I', ret)
+        self.conn.sendall(sendBack)
 
         # listen on socket
             # as msg arrives store fields in state(t + 1) and reward(t)
 
+        try:
+            data = self.conn.recv(400)
+            if not data:
+                break
+            print("================ Packet received! ================")
+            self.pkt = parse_req(data)
+            self.state.setDsts(pkt.getDsts())
+        except Exception:
+            self.conn.close()
+            self.s.close()
+
         done = False
         info = {}
-        return self.state, reward, done, info
+        return self.state, self.pkt.getReward(), done, info
 
     def reset (self):
         # listen on socket
             # as msg arrives store fields in state, drop reward
+
+        try:
+            data = self.conn.recv(400)
+            if not data:
+                break
+            print("================ Packet received! ================")
+            pkt = parse_req(data)
+            self.state.setDsts(pkt.getDsts())
+        except Exception:
+            self.conn.close()
+            self.s.close()
 
     def render ():
 
