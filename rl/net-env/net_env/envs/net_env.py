@@ -36,6 +36,9 @@ class FutureDestinations:
     def getCurDst (self):
         return self.curDst
 
+    def getDsts (self):
+        return self.dsts
+
     def reset (self):
         self.dsts = []
         self.curDst = 0
@@ -61,6 +64,15 @@ class State:
         print("Future destinations: ")
         self.destinations.printL()
         print("Previous actions: ", self.prevActions)
+    def makeNPArray (self):
+        array = np.array()
+        array.append(self.destinations.getCurDst())
+        for dst in self.destinations.getDsts():
+            array.append(dst)
+        for action in self.prevActions:
+            array.append(action)
+        return array
+
 
 class Packet:
     def __init__ (self, destinations, reward):
@@ -94,12 +106,9 @@ def parse_req (data):
 
 class NetEnv (gym.Env):
 
-    NPORTS = 2
-    STATE_FEATURES = 3
-
     def __init__ (self):
-        self.action_space = spaces.Discrete(NPORTS)
-        self.observation_space = spaces.Box(STATE_FEATURES)
+        self.action_space = spaces.Discrete(2) #tb changed
+        self.observation_space = spaces.Box(3,) #tb changed
         self.state = State()
         self.pkt = Packet()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -128,7 +137,7 @@ class NetEnv (gym.Env):
         try:
             data = self.conn.recv(400)
             if not data:
-                break
+                return self.state, self.pkt.getReward(), True, info
             print("================ Packet received! ================")
             self.pkt = parse_req(data)
             self.state.setDsts(pkt.getDsts())
@@ -147,14 +156,10 @@ class NetEnv (gym.Env):
         try:
             data = self.conn.recv(400)
             if not data:
-                break
+                return
             print("================ Packet received! ================")
             pkt = parse_req(data)
             self.state.setDsts(pkt.getDsts())
         except Exception:
             self.conn.close()
             self.s.close()
-
-    def render ():
-
-    def close ():
