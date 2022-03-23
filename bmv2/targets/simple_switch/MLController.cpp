@@ -65,7 +65,7 @@ class MLController : public ExternType {
       return;
     cout << LOG << "sending socket request to get output port" << endl;
     uint32_t lastRw = rewards.pop();
-    int port = py.getPort(c.get(pos.get<int>()), lastRw, c);
+    int port = py->getPort(c.get(pos.get<int>()), lastRw, c);
     outPort = static_cast<Data>(port);
   }
 
@@ -81,7 +81,7 @@ class MLController : public ExternType {
 
 private:
   ConcurrentCBuffer c;
-  PyModule py;
+  PyModule* py = PyModule::getInstance();
   RewardsQ rewards;
 
   char* showAddr(uint32_t ip) {
