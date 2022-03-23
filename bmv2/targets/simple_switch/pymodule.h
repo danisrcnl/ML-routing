@@ -18,6 +18,7 @@
 #define CBufferSize 100
 using namespace std;
 
+
 class PyModule {
 private:
   int n, totw = 0;
@@ -51,11 +52,15 @@ private:
     close(sockfd);
   }
 
-public:
-
   PyModule() {
     createConnection();
   }
+
+  static PyModule* instance;
+
+public:
+
+  static PyModule* getInstance();
 
   ~PyModule() {
     closeConnection();
@@ -101,5 +106,14 @@ public:
     return r;
   }
 };
+
+
+PyModule* PyModule::instance = 0;
+
+PyModule* PyModule::getInstance () {
+  if (instance == 0)
+    instance = new PyModule();
+  return instance;
+}
 
 #endif
