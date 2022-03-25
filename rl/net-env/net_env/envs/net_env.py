@@ -94,6 +94,14 @@ class Packet:
     def getReward (self):
         return self.reward
 
+    def show (self):
+        print("***************************")
+        print("Packet:")
+        print("Future Destinations:")
+        self.futureDestinations.show()
+        print("Last reward:", self.reward)
+        print("***************************")
+
 
 def parse_req (data):
     strdata = data.decode('UTF-8')
@@ -120,14 +128,15 @@ class NetEnv (gym.Env):
         self.observation_space = spaces.Box(low = 0, high = MAX, shape=(3, 5)) #tb changed
         self.state = State()
         self.pkt = Packet(0, 0)
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.bind((HOST_IP, PORT))
-        self.s.listen()
-        while True:
-            print("listening...")
-            self.conn, self.addr = self.s.accept()
-            print("connected by", self.addr)
-            return
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            self.s = s
+            self.s.bind((HOST_IP, PORT))
+            self.s.listen()
+            while True:
+                print("listening...")
+                self.conn, self.addr = self.s.accept()
+                print("connected by", self.addr)
+                return
 
     def step (self, action):
 
@@ -151,12 +160,12 @@ class NetEnv (gym.Env):
                 return self.state, self.pkt.getReward(), True, info
             print("================ Packet received! ================")
             self.pkt = parse_req(data)
-            self.state.setDsts(pkt.getDsts())
-        except Exception:
-            print("EXCEPTION!!!")
-            return self.state, self.pkt.getReward(), True, info
-            #self.conn.close()
-            #self.s.close()
+            self.pkt.show()
+            self.state.setDsts(self.pkt.getDsts())
+        except Exception as e:
+            print("Exception occured:", e)
+            self.conn.close()
+            self.s.close()
 
         done = False
         return self.state.makeNPArray(), self.pkt.getReward(), done, info
