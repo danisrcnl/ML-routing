@@ -39,8 +39,12 @@ list<string> readP4app () {
 
 void showMacs (unordered_map <uint64_t, string> macs) {
     cout << "[parseMac.h] " << "Printing list of mac addresses mapping" << endl;
-    for (auto i : macs)
-      cout << "[parseMac.h] " << i.first << " => " << i.second << endl;
+    for (auto i : macs) {
+      stringstream ss;
+      ss << hex << i.first;
+      string addr = ss.str();
+      cout << "[parseMac.h] " << addr << " => " << i.second << endl;
+    }
 }
 
 unordered_map <uint64_t, string> parseMac () {
@@ -71,7 +75,6 @@ unordered_map <uint64_t, string> parseMac () {
       }
 
     }
-    showMacs(macs);
     fp.close();
 
     return macs;

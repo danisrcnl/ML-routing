@@ -37,6 +37,8 @@ class MLController : public ExternType {
 
   void init() override {
     cout << LOG << "init called" << endl;
+    firstRun = true;
+    isIngress = true;
   }
 
   void simulate_computation () {
@@ -65,16 +67,24 @@ class MLController : public ExternType {
   }
 
   void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort) {
-    sleep(10);
+    if (firstRun && isIngress) {
+      sleep(10);
+      firstRun = false;
+    }
     if (MLController::hosts.empty())
       MLController::hosts = parseMac();
-    cout << LOG << "Looking up mac address " << mac.get<uint64_t>() << endl;
+    cout << LOG << "Looking up mac address " << showMac(mac.get<uint64_t>()) << endl;
 
     showMacs(MLController::hosts);
 
+    if (MLController::hosts.find(mac.get<uint64_t>()) == MLController::hosts.end()) {
+      cout << LOG << "Mac " << showMac(mac.get<uint64_t>()) << " not found" << endl;
+      return;
+    }
+
     string host = MLController::hosts[mac.get<uint64_t>()];
 
-    cout << LOG << "Mac address " << mac.get<uint64_t>() << " is associated to host " << host << endl;
+    cout << LOG << "Mac address " << showMac(mac.get<uint64_t>()) << " is associated to host " << host << endl;
 
     if (MLController::pyS.find(host) == MLController::pyS.end())
       MLController::pyS[host] = new PyModule();
@@ -96,18 +106,35 @@ class MLController : public ExternType {
     rewards.push(qtime.get<uint32_t>());
   }
 
+  void setAsIngress () {
+    isIngress = true;
+  }
+
+  void setAsEgress () {
+    isIngress = false;
+  }
+
   virtual ~MLController () {}
 
 private:
+  bool isIngress;
   ConcurrentCBuffer c;
   static unordered_map <string, PyModule*> pyS;
   static unordered_map <uint64_t, string> hosts;
+  bool firstRun;
   RewardsQ rewards;
 
   char* showAddr(uint32_t ip) {
     struct in_addr ip_addr;
     ip_addr.s_addr = htonl(ip);
     return inet_ntoa(ip_addr);
+  }
+
+  string showMac (uint64_t mac) {
+    stringstream ss;
+    ss << hex << mac;
+    string macString = ss.str();
+    return macString;
   }
 };
 
@@ -121,6 +148,8 @@ BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, Data&, const Data
 BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, const Data&, Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, setAsIngress);
+BM_REGISTER_EXTERN_METHOD(MLController, setAsEgress);
 
 int import_ml_controller() {
   return 0;
