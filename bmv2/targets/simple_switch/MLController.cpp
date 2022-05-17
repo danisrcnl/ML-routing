@@ -2,13 +2,17 @@
 #include <unistd.h>
 #include <iostream>
 #include <array>
+#include <unordered_map>
 #include <mutex>
 #include <cinttypes>
 #include <thread>
 #include <chrono>
 #include <arpa/inet.h>
 #include "pymodule.h"
+#include "parseMac.h"
 #include "rewardsQ.h"
+#include <stdio.h>
+#include <limits.h>
 
 #define PORT "1500"
 #define IP "0.0.0.0"
@@ -60,7 +64,22 @@ class MLController : public ExternType {
     c.pop(pos.get<int>());
   }
 
-  void getOutputPort(const Data& pos, const Data& valid_bool, Data& outPort) {
+  void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort) {
+    sleep(10);
+    if (MLController::hosts.empty())
+      MLController::hosts = parseMac();
+    cout << LOG << "Looking up mac address " << mac.get<uint64_t>() << endl;
+
+    showMacs(MLController::hosts);
+
+    string host = MLController::hosts[mac.get<uint64_t>()];
+
+    cout << LOG << "Mac address " << mac.get<uint64_t>() << " is associated to host " << host << endl;
+
+    if (MLController::pyS.find(host) == MLController::pyS.end())
+      MLController::pyS[host] = new PyModule();
+    PyModule* py = MLController::pyS[host];
+    py->setPort(host);
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
     cout << LOG << "sending socket request to get output port" << endl;
@@ -81,7 +100,8 @@ class MLController : public ExternType {
 
 private:
   ConcurrentCBuffer c;
-  PyModule* py = PyModule::getInstance();
+  static unordered_map <string, PyModule*> pyS;
+  static unordered_map <uint64_t, string> hosts;
   RewardsQ rewards;
 
   char* showAddr(uint32_t ip) {
@@ -91,12 +111,15 @@ private:
   }
 };
 
+unordered_map <string, PyModule*> MLController::pyS;
+unordered_map <uint64_t, string> MLController::hosts;
+
 BM_REGISTER_EXTERN(MLController);
 BM_REGISTER_EXTERN_METHOD(MLController, simulate_computation);
 BM_REGISTER_EXTERN_METHOD(MLController, print);
 BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, const Data&, Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&);
 
 int import_ml_controller() {

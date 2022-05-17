@@ -16,7 +16,9 @@ MLController.cpp \
 address.h \
 pymodule.h \
 ccbuffer.h \
-rewardsQ.h
+rewardsQ.h \
+parseMac.h \
+nlohmann/json.hpp
 
 libsimpleswitch_la_LIBADD = \
 $(top_builddir)/src/bm_sim/libbmsim.la \

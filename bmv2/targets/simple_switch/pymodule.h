@@ -12,7 +12,6 @@
 #include <arpa/inet.h>
 #include "ccbuffer.h"
 
-#define PORT "1500"
 #define IP "0.0.0.0"
 #define LOG_py "[pymodule.h] "
 #define CBufferSize 100
@@ -26,47 +25,97 @@ private:
   char buffer[400];
   char sbuffer[400];
   int sockfd;
+  bool connected;
+  int port = 1400;
 
-  void createConnection() {
+  int getOffset (string name) {
+    cout << LOG_py << "evaluating the offset..." << endl;
+    int offset = 0;
+    if (name[0] == 'l')
+        offset += 10;
+    cout << LOG_py << "offset set equal to " << offset << " + " << name[1] << " -48 = " << offset << endl;
+    offset = offset + name[1] - 48;
+    return offset;
+  }
+
+  bool createConnection() {
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd < 0)
-        throw std::runtime_error("couldn't create socket");
+      throw std::runtime_error("couldn't create socket");
     else if (sockfd > 0)
-        cout << LOG_py << "socket created, sockfd = " << sockfd << endl;
+      cout << LOG_py << "socket created, sockfd = " << sockfd << endl;
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(atoi(PORT));
+    serv_addr.sin_port = htons(port);
     inet_pton(AF_INET, IP, &(serv_addr.sin_addr.s_addr));
 
     cout << LOG_py << "attempting to connect to server" << endl;
 
     int conn_success = connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-    if (conn_success < 0)
-        throw std::runtime_error("couldn't find python module listening");
-    else
-        cout << LOG_py << "succesfully connected to python module, with sockfd = " << sockfd << endl;
+    if (conn_success > 0)
+      connected = true;
+      cout << LOG_py << "succesfully connected to python module, with sockfd = " << sockfd << endl;
+
+    return connected;
   }
 
   void closeConnection () {
     close(sockfd);
   }
-
+/*
   PyModule() {
-    createConnection();
+    connected = false;
   }
 
   static PyModule* instance;
-
+*/
 public:
 
-  static PyModule* getInstance();
+  //static PyModule* getInstance();
+
+  PyModule() {
+    cout << LOG_py << "PyModule created" << endl;
+    connected = false;
+  }
+
+  PyModule(const PyModule& source) {
+    this->n = source.n;
+    this->totw = source.totw;
+    this->serv_addr = source.serv_addr;
+    for (int i = 0; i < 400; i++) {
+      this->buffer[i] = source.buffer[i];
+      this->sbuffer[i] = source.sbuffer[i];
+    }
+    this->sockfd = source.sockfd;
+    this->connected = source.connected;
+    this->port = source.port;
+  }
+
+  PyModule(PyModule&& source) {
+    this->n = source.n;
+    this->totw = source.totw;
+    this->serv_addr = source.serv_addr;
+    for (int i = 0; i < 400; i++) {
+      this->buffer[i] = source.buffer[i];
+      this->sbuffer[i] = source.sbuffer[i];
+    }
+    this->sockfd = source.sockfd;
+    this->connected = source.connected;
+    this->port = source.port;
+  }
 
   ~PyModule() {
     closeConnection();
   }
 
   int getPort(uint32_t address, uint32_t qTime, ConcurrentCBuffer& c) {
+    if (!connected)
+      createConnection();
+    if (!connected) {
+      cout << LOG_py << "No py module listening, standard response given" << endl;
+      return 0;
+    }
     fd_set fds;
     struct timeval tv;
     char* ptr = sbuffer;
@@ -105,8 +154,15 @@ public:
     r = *response;
     return r;
   }
-};
 
+  void setPort (string name) {
+    if (port != 1400)
+      return;
+    port += getOffset(name);
+    cout << LOG_py << "Port has been set equal to " << port << endl;
+  }
+};
+/*
 
 PyModule* PyModule::instance = 0;
 
@@ -115,5 +171,5 @@ PyModule* PyModule::getInstance () {
     instance = new PyModule();
   return instance;
 }
-
+*/
 #endif

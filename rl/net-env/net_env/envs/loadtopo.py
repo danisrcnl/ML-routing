@@ -29,6 +29,7 @@ class Node:
     def __init__ (self, name):
         self.name = name
         self.ports = {}
+        self.distances = {}
 
     def getName (self):
         return self.name
@@ -44,6 +45,15 @@ class Node:
 
     def getPorts (self):
         return self.ports
+
+    def addDistance (self, node, distance):
+        self.distances[node] = distance
+
+    def getDistance (self, node):
+        return self.distances[node]
+
+    def getDistances (self):
+        return self.distances
 
 class Topology:
     def __init__ (self):
@@ -115,6 +125,9 @@ class Topology:
             for p in s.getPorts():
                 port = s.getPort(p)
                 print("\t*", port.getName(), "[ mac: ", port.getMac(), " ip: ", port.getIp(), "] connected to ", port.getNeighbor().getName())
+            print("\tDistances:")
+            for key in s.getDistances():
+                print("\t*", s.getDistances()[key], "from", key)
             print("\n")
         print("\n\n== Hosts ==")
         for h in self.hosts:
@@ -145,6 +158,14 @@ def readp4app (topology):
         topology.addSwitch(key)
     for key in p4app['topology']['hosts'].keys():
         topology.addHost(key)
+
+def readDistances (topology):
+    f = open("distances.json")
+    distances = json.load(f)
+    for s1 in distances.keys():
+        node = topology.getNode(s1)
+        for s2 in distances[s1].keys():
+            node.addDistance(s2, distances[s1][s2])
 
 def loadtopology ():
     topology = Topology()

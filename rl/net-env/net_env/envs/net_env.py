@@ -5,8 +5,11 @@ import struct
 import itertools
 import collections
 import numpy as np
+import json
+import os
+import loadtopo as topo
 
-PORT, HOST_IP = 1500, '0.0.0.0'
+PORT, HOST_IP = 1400, '0.0.0.0'
 MAX = 4294967295
 
 def fill (vec, max):
@@ -123,11 +126,19 @@ def parse_req (data):
 
 class NetEnv (gym.Env):
 
-    def __init__ (self):
-        self.action_space = spaces.Discrete(2) #tb changed
-        self.observation_space = spaces.Box(low = 0, high = MAX, shape=(3, 5)) #tb changed
+    def __init__ (self, nports, id):
+        self.nports = nports
+        self.id = id
+        print("initialized with nports =", nports, ", id =", id)
+        self.action_space = spaces.Discrete(self.nports)
+        self.observation_space = spaces.Box(low = 0, high = MAX, shape=(3, 5))
         self.state = State()
         self.pkt = Packet(0, 0)
+        self.topology = topo.loadtopology()
+        self.node = self.topology.getNode(id)
+
+        # todo SET PORT OFFSET PORT + ...
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             self.s = s
             self.s.bind((HOST_IP, PORT))
@@ -148,7 +159,6 @@ class NetEnv (gym.Env):
         ret = action
         addAction(self.state.getCurDst(), action)
         sendBack = struct.pack('I', ret)
-        print(self.conn)
         self.conn.sendall(sendBack)
 
         # listen on socket
@@ -171,6 +181,9 @@ class NetEnv (gym.Env):
         return self.state.makeNPArray(), self.pkt.getReward(), done, info
 
     def reset (self):
+        print(self.nports)
+        print(self.parsed)
+        print(self.filename)
         # listen on socket
             # as msg arrives store fields in state, drop reward
 
