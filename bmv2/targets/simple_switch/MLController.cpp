@@ -75,8 +75,6 @@ class MLController : public ExternType {
       MLController::hosts = parseMac();
     cout << LOG << "Looking up mac address " << showMac(mac.get<uint64_t>()) << endl;
 
-    showMacs(MLController::hosts);
-
     if (MLController::hosts.find(mac.get<uint64_t>()) == MLController::hosts.end()) {
       cout << LOG << "Mac " << showMac(mac.get<uint64_t>()) << " not found" << endl;
       return;
@@ -87,9 +85,8 @@ class MLController : public ExternType {
     cout << LOG << "Mac address " << showMac(mac.get<uint64_t>()) << " is associated to host " << host << endl;
 
     if (MLController::pyS.find(host) == MLController::pyS.end())
-      MLController::pyS[host] = new PyModule();
+      MLController::pyS[host] = new PyModule(host);
     PyModule* py = MLController::pyS[host];
-    py->setPort(host);
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
     cout << LOG << "sending socket request to get output port" << endl;

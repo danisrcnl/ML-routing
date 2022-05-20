@@ -126,7 +126,7 @@ def parse_req (data):
 
 class NetEnv (gym.Env):
 
-    def __init__ (self, nports, id):
+    def __init__ (self, nports, id, port):
         self.nports = nports
         self.id = id
         print("initialized with nports =", nports, ", id =", id)
@@ -134,19 +134,23 @@ class NetEnv (gym.Env):
         self.observation_space = spaces.Box(low = 0, high = MAX, shape=(3, 5))
         self.state = State()
         self.pkt = Packet(0, 0)
-        self.topology = topo.loadtopology()
-        self.node = self.topology.getNode(id)
-
-        # todo SET PORT OFFSET PORT + ...
+        self.port = port
+        self.firstRun = True
+        self.node = None
+        self.topology = None
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             self.s = s
-            self.s.bind((HOST_IP, PORT))
+            self.s.bind((HOST_IP, self.port))
             self.s.listen()
             while True:
                 print("listening...")
                 self.conn, self.addr = self.s.accept()
                 print("connected by", self.addr)
+                if self.firstRun:
+                    self.topology = topo.loadtopology()
+                    self.node = self.topology.getNode(id)
+                    self.firstRun = False
                 return
 
     def step (self, action):
@@ -181,9 +185,6 @@ class NetEnv (gym.Env):
         return self.state.makeNPArray(), self.pkt.getReward(), done, info
 
     def reset (self):
-        print(self.nports)
-        print(self.parsed)
-        print(self.filename)
         # listen on socket
             # as msg arrives store fields in state, drop reward
 
