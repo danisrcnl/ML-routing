@@ -95,6 +95,24 @@ class MLController : public ExternType {
     outPort = static_cast<Data>(port);
   }
 
+  // receives mac of router to identify it, uses that field to write the mac of the chosen neighbor
+  void getNeighborMac (Data& mac, const Data& port, Data& doForward) {
+    uint32_t port_int = port.get<uint32_t>();
+    uint64_t mac_int = mac.get<uint64_t>();
+    cout << LOG << "Getting neighbor for mac " << showMac(mac_int) << " on port " << port_int << endl;
+    if (MLController::hosts.find(mac_int) == MLController::hosts.end()) {
+      doForward = static_cast<Data>(0);
+      cout << LOG << "Address not associated to a node, not forwarding" << endl;
+      return;
+    }
+    string host = MLController::hosts[mac_int];
+    cout << LOG << "Current node is " << host << endl;
+    uint64_t rv = getNeighbor(host, port_int);
+    cout << LOG << "Neighbor of " << host << " on port " << port_int << " has mac " << showMac(rv) << endl;
+    mac = static_cast<Data>(rv);
+    doForward = static_cast<Data>(1);
+  }
+
   void sendReward(const Data& valid_bool, const Data& qtime) {
     // qtime will be bit<32> deq_timedelta in p4
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
@@ -147,6 +165,7 @@ BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&,
 BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsIngress);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsEgress);
+BM_REGISTER_EXTERN_METHOD(MLController, getNeighborMac, Data&, const Data&, Data&);
 
 int import_ml_controller() {
   return 0;

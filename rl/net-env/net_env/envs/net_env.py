@@ -12,6 +12,13 @@ import loadtopo as topo
 PORT, HOST_IP = 1400, '0.0.0.0'
 MAX = 4294967295
 
+def makeRw (distance, qtime):
+    if qtime == 0:
+        qtime = 1
+    if distance == 0:
+        distance = 1
+    return (1/(distance*10)) + (1/qtime)
+
 def fill (vec, max):
     if (len(vec) < max):
         for i in range (0, max - len(vec)):
@@ -60,7 +67,7 @@ class FutureDestinations:
         self.size = 0
 
     def show (self):
-        print("Number of future destinations:", self.size)
+        print("Number of future destinations:", len(self.dsts))
         print("Current destination:", self.curDst)
         print("List of future destinations:")
         for dst in self.dsts:
@@ -113,14 +120,12 @@ def parse_req (data):
     if parsed[0] == 'GETP':
         destinations = FutureDestinations()
         size = int(parsed[1])
-        #destinations.setSize(size) meant to be always 50
         dst = int(parsed[2])
         destinations.setCurDst(dst)
         lastRw = int(parsed[3])
         max = 4 + size
         for i in range(4, max):
             destinations.pushDst(parsed[i])
-        print("Last reward:", lastRw)
         pkt = Packet(destinations, lastRw)
         return pkt
 
@@ -154,7 +159,7 @@ class NetEnv (gym.Env):
                 return
 
     def step (self, action):
-
+        action = action + 1 # because action goes from 0 to N-1, while ports are counted from 1 to N
         info = {}
         # action contains the # of the port the packet must be forwarded to
 
@@ -164,6 +169,23 @@ class NetEnv (gym.Env):
         addAction(self.state.getCurDst(), action)
         sendBack = struct.pack('I', ret)
         self.conn.sendall(sendBack)
+
+        ifname = self.id + "-eth" + str(action)
+        interface = self.node.getPort(ifname)
+        targetNode = self.topology.getNodeByIp(self.state.getCurDst())
+        if targetNode == self.id:
+            distance = 0.1
+        else:
+            if interface.getName() == "none":
+                print("didn't find interface", ifname)
+                distance = 1
+            else:
+                neighbor = interface.getNeighbor()
+                if targetNode == "error":
+                    print("didn't find target node")
+                    distance = 1
+                else:
+                    distance = neighbor.getDistance(targetNode)
 
         # listen on socket
             # as msg arrives store fields in state(t + 1) and reward(t)
@@ -182,7 +204,9 @@ class NetEnv (gym.Env):
             self.s.close()
 
         done = False
-        return self.state.makeNPArray(), self.pkt.getReward(), done, info
+        rw = makeRw(distance, self.pkt.getReward())
+        print("Sending back reward of", rw)
+        return self.state.makeNPArray(), rw, done, info
 
     def reset (self):
         # listen on socket
