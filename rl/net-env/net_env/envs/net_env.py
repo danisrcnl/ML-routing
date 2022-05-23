@@ -173,17 +173,20 @@ class NetEnv (gym.Env):
         ifname = self.id + "-eth" + str(action)
         interface = self.node.getPort(ifname)
         targetNode = self.topology.getNodeByIp(self.state.getCurDst())
-        if targetNode == self.id:
-            distance = 0.1
+        if interface.getName() == "none":
+            print("didn't find interface", ifname)
+            distance = 1
         else:
-            if interface.getName() == "none":
-                print("didn't find interface", ifname)
+            neighbor = interface.getNeighbor()
+            if targetNode == "error":
+                print("didn't find target node")
                 distance = 1
             else:
-                neighbor = interface.getNeighbor()
-                if targetNode == "error":
-                    print("didn't find target node")
-                    distance = 1
+                if "h" in neighbor.getName():
+                    if targetNode == neighbor.getName():
+                        distance = 0.001
+                    else:
+                        distance = 100
                 else:
                     distance = neighbor.getDistance(targetNode)
 

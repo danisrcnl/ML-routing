@@ -110,8 +110,9 @@ uint64_t getNeighbor (string host, uint32_t port) {
       break;
     }
   }
+  switchInfo = j[neighborId];
   cout << LOG_mac << "chosen neighbor is " << neighborId << endl;
-  string macStr = switchInfo[neighborId]["mac"];
+  string macStr = switchInfo[host]["mac"];
   cout << LOG_mac << "chosen neighbor has mac " << macStr << endl;
   fp.close();
   return convert_mac(macStr);

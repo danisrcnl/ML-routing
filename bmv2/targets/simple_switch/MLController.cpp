@@ -129,6 +129,14 @@ class MLController : public ExternType {
     isIngress = false;
   }
 
+  void logFw (const Data& macsrc, const Data& macdst, const Data& port) {
+    cout << "Sending out packet on port " << port.get<int>() << endl;
+    cout << "=========================" << endl;
+    cout << "MAC src: " << showMac(macsrc.get<uint64_t>()) << endl;
+    cout << "MAC dst: " << showMac(macdst.get<uint64_t>()) << endl;
+    cout << "=========================" << endl;
+  }
+
   virtual ~MLController () {}
 
 private:
@@ -166,6 +174,7 @@ BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsIngress);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsEgress);
 BM_REGISTER_EXTERN_METHOD(MLController, getNeighborMac, Data&, const Data&, Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, logFw, const Data&, const Data&, const Data&);
 
 int import_ml_controller() {
   return 0;
