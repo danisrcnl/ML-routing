@@ -149,7 +149,7 @@ class NetEnv (gym.Env):
             self.s.bind((HOST_IP, self.port))
             self.s.listen()
             while True:
-                print("listening...")
+                print("listening on address " + HOST_IP + ", port " + str(self.port) + "...")
                 self.conn, self.addr = self.s.accept()
                 print("connected by", self.addr)
                 if self.firstRun:
@@ -194,9 +194,10 @@ class NetEnv (gym.Env):
             # as msg arrives store fields in state(t + 1) and reward(t)
 
         try:
-            data = self.conn.recv(400)
+            data = self.conn.recv(512)
             if not data:
-                return self.state, self.pkt.getReward(), True, info
+                print("no data")
+                return self.state.makeNPArray(), self.pkt.getReward(), True, info
             print("================ Packet received! ================")
             self.pkt = parse_req(data)
             self.pkt.show()
@@ -216,7 +217,7 @@ class NetEnv (gym.Env):
             # as msg arrives store fields in state, drop reward
 
         try:
-            data = self.conn.recv(400)
+            data = self.conn.recv(512)
             if not data:
                 return
             print("================ Packet received! ================")
