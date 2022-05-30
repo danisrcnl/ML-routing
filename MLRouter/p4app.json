@@ -2,7 +2,7 @@
   "program": "MLRouter.p4",
   "switch": "simple_switch",
   "compiler": "p4c-bm2-ss",
-  "options": "-o MLRouter.json",
+  "options": "",
   "switch_cli": "simple_switch_CLI",
   "cli": true,
   "pcap_dump": false,
