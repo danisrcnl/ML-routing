@@ -9,8 +9,8 @@ extern MLController {
     MLController();
     void simulate_computation();
     void print();
-    void pushAddr(in ip4Addr_t address, inout bit<32> pos, in bit<1> valid_bool);
-    void popAddr(in bit<32> pos, in bit<1> valid_bool);
+    void pushAddr(in macAddr_t mac, in ip4Addr_t address, inout bit<32> pos, in bit<1> valid_bool);
+    void popAddr(in macAddr_t mac, in bit<32> pos, in bit<1> valid_bool);
     void getOutputPort(in macAddr_t mac, in bit<32> pos, in bit<1> valid_bool, inout bit<9> outPort);
     void sendReward(in bit<1> valid_bool, in bit<32> qTime);
     void setAsIngress();
@@ -55,7 +55,7 @@ control MyIngress(inout headers hdr,
     }
 
     action pushAddress() {
-        ml_controller.pushAddr(hdr.ipv4.dstAddr, meta.identifier, meta.valid_bool);
+        ml_controller.pushAddr(hdr.ethernet.dstAddr, hdr.ipv4.dstAddr, meta.identifier, meta.valid_bool);
     }
 
     action getNeighbor(bit<9> port) {
@@ -79,6 +79,9 @@ control MyIngress(inout headers hdr,
         if (fw == 1) {
             ipv4_forward(dstMac, outP);
         }
+        if (fw == 0) {
+            mark_to_drop();
+        }
     }
 }
 
@@ -98,7 +101,7 @@ control MyEgress(inout headers hdr,
     }
 
     action popAddress () {
-        ml_controller.popAddr(meta.identifier, meta.valid_bool);
+        ml_controller.popAddr(hdr.ethernet.srcAddr, meta.identifier, meta.valid_bool);
     }
 
     action printArray() {
