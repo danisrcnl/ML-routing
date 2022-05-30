@@ -14,7 +14,6 @@
 #define PORT "1500"
 #define IP "0.0.0.0"
 #define LOG_addr "[address.h] "
-#define CBufferSize 100
 using namespace std;
 
 class Address {

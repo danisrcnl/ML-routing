@@ -15,6 +15,8 @@
 using namespace std;
 using json = nlohmann::json;
 
+bool debug = false;
+
 uint64_t convert_mac(string mac) {
     mac.erase(remove(mac.begin(), mac.end(), ':'), mac.end());
     uint64_t addr;
@@ -40,12 +42,12 @@ list<string> readP4app () {
 }
 
 void showMacs (unordered_map <uint64_t, string> macs) {
-    cout << LOG_mac << "Printing list of mac addresses mapping" << endl;
+    if (debug) cout << LOG_mac << "Printing list of mac addresses mapping" << endl;
     for (auto i : macs) {
       stringstream ss;
       ss << hex << i.first;
       string addr = ss.str();
-      cout << LOG_mac << addr << " => " << i.second << endl;
+      if (debug) cout << LOG_mac << addr << " => " << i.second << endl;
     }
 }
 
@@ -111,9 +113,9 @@ uint64_t getNeighbor (string host, uint32_t port) {
     }
   }
   switchInfo = j[neighborId];
-  cout << LOG_mac << "chosen neighbor is " << neighborId << endl;
+  if (debug) cout << LOG_mac << "chosen neighbor is " << neighborId << endl;
   string macStr = switchInfo[host]["mac"];
-  cout << LOG_mac << "chosen neighbor has mac " << macStr << endl;
+  if (debug) cout << LOG_mac << "chosen neighbor has mac " << macStr << endl;
   fp.close();
   return convert_mac(macStr);
 }
