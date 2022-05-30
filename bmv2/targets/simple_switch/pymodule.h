@@ -16,29 +16,30 @@
 
 #define IP "0.0.0.0"
 #define LOG_py "[pymodule.h] "
-#define CBufferSize 100
 using namespace std;
 using json = nlohmann::json;
 
 
 class PyModule {
 private:
+  mutex send_mutex;
   int n, totw = 0;
   struct sockaddr_in serv_addr;
-  char buffer[400];
-  char sbuffer[400];
+  char buffer[512];
+  char sbuffer[512];
   int sockfd;
   bool connected;
   bool created;
   int port = 1400;
+  bool debug;
 
   int getOffset (string name) {
-    cout << LOG_py << "evaluating the offset..." << endl;
+    if (debug) cout << LOG_py << "evaluating the offset..." << endl;
     int offset = 0;
     if (name[0] == 'l')
         offset += 10;
     offset = offset + name[1] - 48;
-    cout << LOG_py << "offset set equal to " << offset << " [chosen port is " << port + offset << "]" << endl;
+    if (debug) cout << LOG_py << "offset set equal to " << offset << " [chosen port is " << port + offset << "]" << endl;
 
     return offset;
   }
@@ -52,7 +53,7 @@ private:
       if (sockfd < 0)
         throw std::runtime_error("couldn't create socket");
       else if (sockfd > 0) {
-        cout << LOG_py << "socket created, sockfd = " << sockfd << endl;
+        if (debug) cout << LOG_py << "socket created, sockfd = " << sockfd << endl;
         created = true;
       }
 
@@ -62,12 +63,12 @@ private:
 
     }
 
-    cout << LOG_py << "attempting to connect to server" << endl;
+    if (debug) cout << LOG_py << "attempting to connect to server" << endl;
 
     int conn_success = connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     if (conn_success >= 0) {
       connected = true;
-      cout << LOG_py << "succesfully connected to python module, with sockfd = " << sockfd << endl;
+      if (debug) cout << LOG_py << "succesfully connected to python module, with sockfd = " << sockfd << endl;
     }
 
     return connected;
@@ -81,7 +82,7 @@ private:
     if (port != 1400)
       return;
     port += getOffset(name);
-    cout << LOG_py << "Port has been set equal to " << port << endl;
+    if (debug) cout << LOG_py << "Port has been set equal to " << port << endl;
   }
 /*
   PyModule() {
@@ -95,7 +96,8 @@ public:
   //static PyModule* getInstance();
 
   PyModule (string host) {
-    cout << LOG_py << "PyModule created" << endl;
+    debug = true;
+    if (debug) cout << LOG_py << "PyModule created for host " << host << endl;
     connected = false;
     created = false;
     setPort(host);
@@ -132,12 +134,15 @@ public:
   }
 
   int getPort (uint32_t address, uint32_t qTime, ConcurrentCBuffer& c) {
+    if (debug) cout << LOG_py << "Waiting for buffers lock" << endl;
+    lock_guard<mutex> lk(send_mutex);
+    if (debug) cout << LOG_py << "Acquired buffers lock" << endl;
     if (!connected) {
-      cout << LOG_py << "Not connected yet, creating connection" << endl;
+      if (debug) cout << LOG_py << "Not connected yet, creating connection" << endl;
       connected = createConnection();
     }
     if (!connected) {
-      cout << LOG_py << "No py module listening, standard response given" << endl;
+      if (debug) cout << LOG_py << "No py module listening, standard response given" << endl;
       return 1;
     }
     fd_set fds;
@@ -170,11 +175,13 @@ public:
         totw += written;
       }
     }
+    if (debug) cout << LOG_py << "Sending: " << sbuffer << endl;
     send(sockfd, sbuffer, sizeof(sbuffer), 0);
     int r = 0;
+    if (debug) cout << LOG_py << "Waiting for the port from baselines" << endl;
     while ((recv(sockfd, buffer, sizeof(buffer), 0)) <= 0);
     int* response = (int *) buffer;
-    printf("%d\n", *response);
+    if (debug) cout << LOG_py << "Port received, got " << *response << endl;
     r = *response;
     return r;
   }
