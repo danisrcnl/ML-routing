@@ -17,7 +17,6 @@
 #define PORT "1500"
 #define IP "0.0.0.0"
 #define LOG "[MLController.cpp] "
-#define CBufferSize 100
 
 using namespace std;
 
@@ -36,62 +35,70 @@ class MLController : public ExternType {
   }
 
   void init() override {
-    cout << LOG << "init called" << endl;
+    if (debug) cout << LOG << "Building instance of MLController..." << endl;
+    debug = true;
     firstRun = true;
     isIngress = true;
+    py = nullptr;
+    c = nullptr;
+    host = "nullhost";
   }
 
   void simulate_computation () {
-    cout << LOG << "simulate_computation called" << endl;
+    if (debug) cout << LOG << "simulate_computation called" << endl;
     sleep(1);
   }
 
   void print() {
-    cout << LOG << "print called" << endl;
-    c.show();
+    if (debug) cout << LOG << "print called" << endl;
+    c->show();
   }
 
-  void pushAddr(const Data& address, Data& pos, const Data& valid_bool) {
-    if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
-      return;
-    cout << LOG << "push called for address " << showAddr(address.get<uint32_t>()) << endl;
-    int ret = c.push(address.get<uint32_t>());
-    pos = static_cast<Data>(ret);
-  }
+  void pushAddr(const Data& mac, const Data& address, Data& pos, const Data& valid_bool) {
 
-  void popAddr(const Data& pos, const Data& valid_bool) {
-    if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
-      return;
-    cout << LOG << "pop called for element at pos = " << pos.get<int>() << endl;
-    c.pop(pos.get<int>());
-  }
-
-  void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort) {
-    if (firstRun && isIngress) {
+    if (firstRun) {
+      if (debug) cout << LOG << "First run, going sleep 10 seconds to wait for topology.db" << endl;
       sleep(10);
       firstRun = false;
     }
-    if (MLController::hosts.empty())
-      MLController::hosts = parseMac();
-    cout << LOG << "Looking up mac address " << showMac(mac.get<uint64_t>()) << endl;
 
-    if (MLController::hosts.find(mac.get<uint64_t>()) == MLController::hosts.end()) {
-      cout << LOG << "Mac " << showMac(mac.get<uint64_t>()) << " not found" << endl;
-      return;
-    }
-
-    string host = MLController::hosts[mac.get<uint64_t>()];
-
-    cout << LOG << "Mac address " << showMac(mac.get<uint64_t>()) << " is associated to host " << host << endl;
-
-    if (MLController::pyS.find(host) == MLController::pyS.end())
-      MLController::pyS[host] = new PyModule(host);
-    PyModule* py = MLController::pyS[host];
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
-    cout << LOG << "sending socket request to get output port" << endl;
+    if (debug) cout << LOG << "push called for address " << showAddr(address.get<uint32_t>()) << endl;
+    if (MLController::hosts.empty())
+      MLController::hosts = parseMac();
+
+    checkHost(mac);
+    checkCCBuffer();
+
+    int ret = c->push(address.get<uint32_t>());
+    pos = static_cast<Data>(ret);
+  }
+
+  void popAddr(const Data& mac, const Data& pos, const Data& valid_bool) {
+
+    checkHost(mac);
+    checkCCBuffer();
+
+    if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
+      return;
+    if (debug) cout << LOG << "pop called for element at pos = " << pos.get<int>() << endl;
+    c->pop(pos.get<int>());
+  }
+
+  void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort) {
+    if (debug) cout << LOG << "Into getOutputPort" << endl;
+    if (MLController::hosts.empty())
+      MLController::hosts = parseMac();
+
+    if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
+      return;
+
+    checkHost(mac);
+    checkPy();
+    if (debug) cout << LOG << "sending socket request to get output port" << endl;
     uint32_t lastRw = rewards.pop();
-    int port = py->getPort(c.get(pos.get<int>()), lastRw, c);
+    int port = py->getPort(c->get(pos.get<int>()), lastRw, *c);
     outPort = static_cast<Data>(port);
   }
 
@@ -99,16 +106,16 @@ class MLController : public ExternType {
   void getNeighborMac (Data& mac, const Data& port, Data& doForward) {
     uint32_t port_int = port.get<uint32_t>();
     uint64_t mac_int = mac.get<uint64_t>();
-    cout << LOG << "Getting neighbor for mac " << showMac(mac_int) << " on port " << port_int << endl;
-    if (MLController::hosts.find(mac_int) == MLController::hosts.end()) {
+    if (debug) cout << LOG << "Getting neighbor for mac " << showMac(mac_int) << " on port " << port_int << endl;
+
+    if (checkDestination(mac_int) < 0) {
       doForward = static_cast<Data>(0);
-      cout << LOG << "Address not associated to a node, not forwarding" << endl;
       return;
     }
-    string host = MLController::hosts[mac_int];
-    cout << LOG << "Current node is " << host << endl;
+    doForward = static_cast<Data>(1);
+
     uint64_t rv = getNeighbor(host, port_int);
-    cout << LOG << "Neighbor of " << host << " on port " << port_int << " has mac " << showMac(rv) << endl;
+    if (debug) cout << LOG << "Neighbor of " << host << " on port " << port_int << " has mac " << showMac(rv) << endl;
     mac = static_cast<Data>(rv);
     doForward = static_cast<Data>(1);
   }
@@ -117,7 +124,7 @@ class MLController : public ExternType {
     // qtime will be bit<32> deq_timedelta in p4
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
-    cout << LOG << "storing reward in rws queue" << endl;
+    if (debug) cout << LOG << "storing reward in rws queue" << endl;
     rewards.push(qtime.get<uint32_t>());
   }
 
@@ -141,11 +148,16 @@ class MLController : public ExternType {
 
 private:
   bool isIngress;
-  ConcurrentCBuffer c;
+  ConcurrentCBuffer* c;
+  PyModule* py;
+  string host;
+  static unordered_map <string, ConcurrentCBuffer*> ccbuffers;
   static unordered_map <string, PyModule*> pyS;
   static unordered_map <uint64_t, string> hosts;
   bool firstRun;
   RewardsQ rewards;
+  static unordered_map <string, int> packet_counter;
+  bool debug;
 
   char* showAddr(uint32_t ip) {
     struct in_addr ip_addr;
@@ -159,16 +171,57 @@ private:
     string macString = ss.str();
     return macString;
   }
+
+  void checkHost (const Data& mac) {
+    if (host == "nullhost") {
+      if (MLController::hosts.find(mac.get<uint64_t>()) == MLController::hosts.end()) {
+        if (debug) cout << LOG << "Mac " << showMac(mac.get<uint64_t>()) << " not found" << endl;
+        return;
+      }
+      host = MLController::hosts[mac.get<uint64_t>()];
+      if (debug) cout << LOG << "Mac address " << showMac(mac.get<uint64_t>()) << " is associated to node " << host << endl;
+    }
+    else
+      if (debug) cout << LOG << "This switch is already bound to node " << host << endl;
+  }
+
+  int checkDestination (uint64_t mac_int) {
+    if (MLController::hosts.find(mac_int) == MLController::hosts.end()) {
+      if (debug) cout << LOG << "Address not associated to a node, not forwarding" << endl;
+      return -1;
+    }
+    return 0;
+  }
+
+  void checkPy () {
+    if (host == "nullhost")
+      return;
+    if (py == nullptr) {
+      if (MLController::pyS.find(host) == MLController::pyS.end())
+        MLController::pyS[host] = new PyModule(host);
+      py = MLController::pyS[host];
+    }
+  }
+
+  void checkCCBuffer () {
+    if (c == nullptr) {
+      if (MLController::ccbuffers.find(host) == MLController::ccbuffers.end())
+        MLController::ccbuffers[host] = new ConcurrentCBuffer();
+      c = MLController::ccbuffers[host];
+    }
+  }
 };
 
 unordered_map <string, PyModule*> MLController::pyS;
 unordered_map <uint64_t, string> MLController::hosts;
+unordered_map <string, int> MLController::packet_counter;
+unordered_map <string, ConcurrentCBuffer*> MLController::ccbuffers;
 
 BM_REGISTER_EXTERN(MLController);
 BM_REGISTER_EXTERN_METHOD(MLController, simulate_computation);
 BM_REGISTER_EXTERN_METHOD(MLController, print);
-BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, const Data&, Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, const Data&, Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsIngress);
