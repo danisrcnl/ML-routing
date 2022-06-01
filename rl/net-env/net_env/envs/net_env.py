@@ -14,10 +14,8 @@ MAX = 4294967295
 
 def makeRw (distance, qtime):
     if qtime == 0:
-        qtime = 1
-    if distance == 0:
-        distance = 1
-    return (1/(distance*10)) + (1/qtime)
+        return 0.01
+    return 1000 / (1000 * (distance * qtime))
 
 def fill (vec, max):
     if (len(vec) < max):
@@ -143,6 +141,8 @@ class NetEnv (gym.Env):
         self.firstRun = True
         self.node = None
         self.topology = None
+        filelog = open(self.id + "_rl_log.txt", "w")
+        filelog.close()
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             self.s = s
@@ -173,22 +173,15 @@ class NetEnv (gym.Env):
         ifname = self.id + "-eth" + str(action)
         interface = self.node.getPort(ifname)
         targetNode = self.topology.getNodeByIp(self.state.getCurDst())
-        if interface.getName() == "none":
-            print("didn't find interface", ifname)
-            distance = 1
-        else:
-            neighbor = interface.getNeighbor()
-            if targetNode == "error":
-                print("didn't find target node")
-                distance = 1
+        neighbor = interface.getNeighbor()
+        alpha = 1
+        if "h" in neighbor.getName():
+            if targetNode == neighbor.getName():
+                distance = 0.0001
             else:
-                if "h" in neighbor.getName():
-                    if targetNode == neighbor.getName():
-                        distance = 0.001
-                    else:
-                        distance = 100
-                else:
-                    distance = neighbor.getDistance(targetNode)
+                distance = 1000
+        else:
+            distance = neighbor.getDistance(targetNode)
 
         # listen on socket
             # as msg arrives store fields in state(t + 1) and reward(t)
@@ -200,7 +193,6 @@ class NetEnv (gym.Env):
                 return self.state.makeNPArray(), self.pkt.getReward(), True, info
             print("================ Packet received! ================")
             self.pkt = parse_req(data)
-            self.pkt.show()
             self.state.setDsts(self.pkt.getDsts())
         except Exception as e:
             print("Exception occured:", e)
@@ -208,8 +200,12 @@ class NetEnv (gym.Env):
             self.s.close()
 
         done = False
-        rw = makeRw(distance, self.pkt.getReward())
-        print("Sending back reward of", rw)
+        qtime = self.pkt.getReward()
+        rw = makeRw(distance, qtime)
+        filelog = open(self.id + "_rl_log.txt", "a")
+        filelog.write("destination: " + targetNode + ", action: " + str(action) +
+            ", rw = " + str(rw) + " (distance: " + str(distance) + ", qtime: " + str(qtime) + ")\n")
+        filelog.close()
         return self.state.makeNPArray(), rw, done, info
 
     def reset (self):
