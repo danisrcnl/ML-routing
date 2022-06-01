@@ -143,7 +143,7 @@ public:
     }
     if (!connected) {
       if (debug) cout << LOG_py << "No py module listening, standard response given" << endl;
-      return 1;
+      return -1;
     }
     fd_set fds;
     struct timeval tv;

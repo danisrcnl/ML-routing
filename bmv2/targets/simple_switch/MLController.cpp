@@ -86,7 +86,7 @@ class MLController : public ExternType {
     c->pop(pos.get<int>());
   }
 
-  void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort) {
+  void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort, Data& doForward) {
     if (debug) cout << LOG << "Into getOutputPort" << endl;
     if (MLController::hosts.empty())
       MLController::hosts = parseMac();
@@ -99,6 +99,9 @@ class MLController : public ExternType {
     if (debug) cout << LOG << "sending socket request to get output port" << endl;
     uint32_t lastRw = rewards.pop();
     int port = py->getPort(c->get(pos.get<int>()), lastRw, *c);
+    if (port == -1)
+      doForward = static_cast<Data>(0);
+    doForward = static_cast<Data>(1);
     outPort = static_cast<Data>(port);
   }
 
@@ -144,6 +147,38 @@ class MLController : public ExternType {
     cout << "=========================" << endl;
   }
 
+  void logDrop_f (const Data& macsrc, const Data& macdst, const Data& in_port) {
+    if (host == "nullhost") return;
+    lock_guard<std::mutex> lk(log_f_mutex);
+    ofstream ofs;
+    string filename = "fw_drop_log_" + host + ".txt";
+    ofs.open(filename, std::ios_base::app | std::ios_base::in);
+    uint64_t macsrc_int = macsrc.get<uint64_t>();
+    uint64_t macdst_int = macdst.get<uint64_t>();
+    int in_port_int = in_port.get<int>();
+    ofs << "src: " + MLController::hosts[macsrc_int] + ", dst: " + MLController::hosts[macdst_int] + ", port: " + std::to_string(in_port_int) + " [dropped]"<< endl;
+    ofs.close();
+  }
+
+  void logFw_f (const Data& macsrc, const Data& macdst, const Data& ipdst, const Data& in_port, const Data& out_port, const Data& destination) {
+    lock_guard<std::mutex> lk(log_f_mutex);
+    ofstream ofs;
+    string filename = "fw_drop_log_" + host + ".txt";
+    ofs.open(filename, std::ios_base::app | std::ios_base::in);
+    uint64_t macsrc_int = macsrc.get<uint64_t>();
+    uint64_t macdst_int = macdst.get<uint64_t>();
+    uint64_t destination_int = destination.get<uint64_t>();
+    uint32_t ipdst_int = ipdst.get<uint32_t>();
+    int in_port_int = in_port.get<int>();
+    int out_port_int = out_port.get<int>();
+    ofs << "(" + string(showAddr(ipdst_int)) + ") src: " + MLController::hosts[macsrc_int] + ", dst: " +
+      MLController::hosts[macdst_int] + ", port: " +
+      std::to_string(in_port_int) + " [forwarded to " + MLController::hosts[destination_int] +
+      ", port " + std::to_string(out_port_int) + "] (count = " +
+      std::to_string(++MLController::packet_counter[host]) + ")" << endl;
+    ofs.close();
+  }
+
   virtual ~MLController () {}
 
 private:
@@ -158,6 +193,7 @@ private:
   RewardsQ rewards;
   static unordered_map <string, int> packet_counter;
   bool debug;
+  std::mutex log_f_mutex;
 
   char* showAddr(uint32_t ip) {
     struct in_addr ip_addr;
@@ -180,6 +216,10 @@ private:
       }
       host = MLController::hosts[mac.get<uint64_t>()];
       if (debug) cout << LOG << "Mac address " << showMac(mac.get<uint64_t>()) << " is associated to node " << host << endl;
+      ofstream ofs;
+      string filename = "fw_drop_log_" + host + ".txt";
+      ofs.open(filename, std::ofstream::out | std::ofstream::trunc);
+      ofs.close();
     }
     else
       if (debug) cout << LOG << "This switch is already bound to node " << host << endl;
@@ -222,12 +262,14 @@ BM_REGISTER_EXTERN_METHOD(MLController, simulate_computation);
 BM_REGISTER_EXTERN_METHOD(MLController, print);
 BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, const Data&, Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, const Data&, Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, const Data&, Data&, Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsIngress);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsEgress);
 BM_REGISTER_EXTERN_METHOD(MLController, getNeighborMac, Data&, const Data&, Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, logFw, const Data&, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, logDrop_f, const Data&, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, logFw_f, const Data&, const Data&, const Data&, const Data&, const Data&, const Data&);
 
 int import_ml_controller() {
   return 0;
