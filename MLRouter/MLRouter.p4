@@ -11,12 +11,14 @@ extern MLController {
     void print();
     void pushAddr(in macAddr_t mac, in ip4Addr_t address, inout bit<32> pos, in bit<1> valid_bool);
     void popAddr(in macAddr_t mac, in bit<32> pos, in bit<1> valid_bool);
-    void getOutputPort(in macAddr_t mac, in bit<32> pos, in bit<1> valid_bool, inout bit<9> outPort);
+    void getOutputPort(in macAddr_t mac, in bit<32> pos, in bit<1> valid_bool, inout bit<9> outPort, inout bit<1> doForward);
     void sendReward(in bit<1> valid_bool, in bit<32> qTime);
     void setAsIngress();
     void setAsEgress();
     void getNeighborMac(inout macAddr_t mac, in bit<9> port, inout bit<1> doForward);
     void logFw(in macAddr_t macsrc, in macAddr_t macdst, in bit<9> port);
+    void logDrop_f(in macAddr_t macsrc, in macAddr_t macdst, in bit<9> in_port);
+    void logFw_f(in macAddr_t macsrc, in macAddr_t macdst, in ip4Addr_t ipdst, in bit<9> in_port, in bit<9> out_port, in macAddr_t destination);
 }
 
 /*************************************************************************
@@ -51,7 +53,7 @@ control MyIngress(inout headers hdr,
     }
 
     action choosePort() {
-        ml_controller.getOutputPort(hdr.ethernet.dstAddr, meta.identifier, meta.valid_bool, outP);
+        ml_controller.getOutputPort(hdr.ethernet.dstAddr, meta.identifier, meta.valid_bool, outP, fw);
     }
 
     action pushAddress() {
@@ -68,20 +70,28 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = dstAddr;
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
-        ml_controller.logFw(hdr.ethernet.srcAddr, hdr.ethernet.dstAddr, port);
     }
 
     apply {
         setAsIngress();
         pushAddress();
         choosePort();
-        getNeighbor(outP);
         if (fw == 1) {
-            ipv4_forward(dstMac, outP);
+            getNeighbor(outP);
+            if (fw == 1) {
+                ml_controller.logFw_f(hdr.ethernet.srcAddr, hdr.ethernet.dstAddr, hdr.ipv4.dstAddr, standard_metadata.ingress_port, outP, dstMac);
+                ipv4_forward(dstMac, outP);
+            }
+            if (fw == 0) {
+                ml_controller.logDrop_f(hdr.ethernet.srcAddr, hdr.ethernet.dstAddr, standard_metadata.ingress_port);
+                mark_to_drop();
+            }
         }
         if (fw == 0) {
+            ml_controller.logDrop_f(hdr.ethernet.srcAddr, hdr.ethernet.dstAddr, standard_metadata.ingress_port);
             mark_to_drop();
         }
+
     }
 }
 
