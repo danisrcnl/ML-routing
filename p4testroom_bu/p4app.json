@@ -1,0 +1,119 @@
+{
+  "program": "ComplexTopology.p4",
+  "switch": "simple_switch",
+  "compiler": "p4c-bm2-ss",
+  "options": "",
+  "switch_cli": "simple_switch_CLI",
+  "cli": true,
+  "pcap_dump": false,
+  "enable_log": true,
+  "topo_module": {
+    "file_path": "",
+    "module_name": "p4utils.mininetlib.apptopo",
+    "object_name": "AppTopoStrategies"
+  },
+  "controller_module": null,
+  "topodb_module": {
+    "file_path": "",
+    "module_name": "p4utils.utils.topology",
+    "object_name": "Topology"
+  },
+  "mininet_module": {
+    "file_path": "",
+    "module_name": "p4utils.mininetlib.p4net",
+    "object_name": "P4Mininet"
+  },
+  "topology": {
+    "assignment_strategy": "l3",
+    "links": [
+      ["h1", "l1", {
+        "bw": 100
+        }],
+      ["h2", "l2", {
+        "bw": 100
+        }],
+      ["h3", "l3", {
+        "bw": 100
+        }],
+      ["h4", "l4", {
+        "bw": 100
+        }],
+      ["s1", "l1", {
+        "bw": 100
+        }],
+      ["s1", "l2", {
+        "bw": 100
+        }],
+      ["s1", "l3", {
+        "bw": 100
+        }],
+      ["s1", "l4", {
+        "bw": 100
+        }],
+      ["s2", "l1", {
+        "bw": 100
+        }],
+      ["s2", "l2", {
+        "bw": 100
+        }],
+      ["s2", "l3", {
+        "bw": 100
+        }],
+      ["s2", "l4", {
+        "bw": 100
+        }],
+      ["s3", "l1", {
+        "bw": 100
+        }],
+      ["s3", "l2", {
+        "bw": 100
+        }],
+      ["s3", "l3", {
+        "bw": 100
+        }],
+      ["s3", "l4", {
+        "bw": 100
+        }],
+      ["s4", "l1", {
+        "bw": 100
+        }],
+      ["s4", "l2", {
+        "bw": 100
+        }],
+      ["s4", "l3", {
+        "bw": 100
+        }],
+      ["s4", "l4", {
+        "bw": 100
+        }]
+    ],
+    "hosts": {
+      "h1": {
+      },
+      "h2": {
+      },
+      "h3": {
+      },
+      "h4": {
+      }
+    },
+    "switches": {
+      "s1": {
+      },
+      "s2": {
+      },
+      "s3": {
+      },
+      "s4": {
+      },
+      "l1": {
+      },
+      "l2": {
+      },
+      "l3": {
+      },
+      "l4": {
+      }
+    }
+  }
+}
