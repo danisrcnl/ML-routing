@@ -8,14 +8,51 @@ import numpy as np
 import json
 import os
 import loadtopo as topo
+from math import log
+import matplotlib.pyplot as plt
 
 PORT, HOST_IP = 1400, '0.0.0.0'
 MAX = 4294967295
+AH_LENGTH = 2
+FD_LENGTH = 2
+LAMBDA1 = 0
+LAMBDA2 = 0.5
+LAMBDA3 = 0.5
+NHOSTS = 4
+MAXPORTS = 5
+MAXQTIME = 10000
+MINQTIME = 0
+MINDISTANCE = 0
+MAXDISTANCE = 4
 
-def makeRw (distance, qtime):
-    if qtime == 0:
-        return 0.01
-    return 1000 / (1000 * (distance * qtime))
+def minRw ():
+    delta1 = 0
+    delta3 = 1
+    rw1 = LAMBDA1 * delta1 * (1 / (MAXDISTANCE + 1))
+    rw2 = LAMBDA2 * (1 / log(MAXQTIME + 10, 10))
+    rw3 = LAMBDA3 * delta3
+    rw = rw1 + rw2 - rw3
+    return rw
+
+def maxRw ():
+    delta1 = 1
+    delta3 = 0
+    rw1 = LAMBDA1 * delta1 * (1 / (MINDISTANCE + 1))
+    rw2 = LAMBDA2 * (1 / log(MINQTIME + 10, 10))
+    rw3 = LAMBDA3 * delta3
+    rw = rw1 + rw2 - rw3
+    return rw
+
+def makeRw (distance, qtime, dropped):
+    delta1 = 1
+    delta3 = dropped
+    if delta3 == 1:
+        delta1 = 0
+    rw1 = LAMBDA1 * delta1 * (1 / (distance + 1))
+    rw2 = LAMBDA2 * (1 / log(qtime + 10, 10))
+    rw3 = LAMBDA3 * delta3
+    rw = rw1 + rw2 - rw3
+    return rw1, rw2, rw3, rw
 
 def fill (vec, max):
     if (len(vec) < max):
@@ -28,7 +65,7 @@ def fill (vec, max):
 actionHistory = {}
 def addAction (curDst, action):
     if actionHistory.get(curDst) is None:
-        actionHistory[curDst] = collections.deque([action], 5)
+        actionHistory[curDst] = collections.deque([action], AH_LENGTH)
     else:
         actionHistory[curDst].append(action)
 def getActions (curDst):
@@ -42,7 +79,7 @@ class FutureDestinations:
     def __init__ (self):
         self.curDst = 0
         self.size = 5
-        self.dsts = collections.deque(maxlen = 5)
+        self.dsts = collections.deque(maxlen = FD_LENGTH)
 
     def pushDst (self, dst):
         self.dsts.append(int(dst))
@@ -72,23 +109,61 @@ class FutureDestinations:
             print(dst)
 
 class State:
-    def __init__ (self):
+    def __init__ (self, nfeatures, nports):
         self.destinations = FutureDestinations()
         self.prevActions = []
+        self.nfeatures = nfeatures
+        self.topology = None
+        self.nports = nports
     def setDsts (self, destinations):
         self.destinations = destinations
         self.prevActions = getActions(self.destinations.getCurDst())
+    def setTopo (self, topology):
+        self.topology = topology
     def getCurDst (self):
         return self.destinations.getCurDst()
     def show (self):
         print("Future destinations: ")
         self.destinations.show()
         print("Previous actions: ", self.prevActions)
+
     def makeNPArray (self):
+        features = np.full(self.nfeatures, 0)
+        counter = 0
+        targetHost = self.topology.getNodeByIp(self.destinations.getCurDst())
+        index = (counter * NHOSTS) + (int(targetHost[1]) - 1)
+        features[index] = 1
+        futureDestinations = self.destinations.getDsts()
+        for fd in futureDestinations:
+            counter += 1
+            targetHost = self.topology.getNodeByIp(fd)
+            index = (counter * NHOSTS) + (int(targetHost[1]) - 1)
+            features[index] = 1
+        for i in range(0, FD_LENGTH - len(futureDestinations)):
+            counter += 1
+        start = (counter * NHOSTS) + NHOSTS
+        counter = 0
+        hosts = self.topology.getHosts()
+        for h in hosts:
+            hostname = h.getName()
+            if actionHistory.get(hostname) is not None:
+                ah = actionHistory[hostname]
+                for action in ah:
+                    action -= 1
+                    index = start + ((counter * self.nports) + action)
+                    features[index] = 1
+                    counter += 1
+            start += (MAXPORTS * AH_LENGTH)
+            counter = 0
+
+        return features
+
+        '''
         firstrow = []
         firstrow.append(self.destinations.getCurDst())
         array = np.array(object = [fill(firstrow, 5), fill(self.destinations.getDsts(), 5), fill(self.prevActions, 5)])
         return array
+        '''
 
 
 class Packet:
@@ -134,13 +209,21 @@ class NetEnv (gym.Env):
         self.id = id
         print("initialized with nports =", nports, ", id =", id)
         self.action_space = spaces.Discrete(self.nports)
-        self.observation_space = spaces.Box(low = 0, high = MAX, shape=(3, 5))
-        self.state = State()
+        #self.observation_space = spaces.Box(low = 0, high = MAX, shape=(3, 5))
+        self.nfeatures = (AH_LENGTH * MAXPORTS * NHOSTS) + (FD_LENGTH * NHOSTS) + NHOSTS
+        self.observation_space = spaces.Box(low = np.full(self.nfeatures, 0), high = np.full(self.nfeatures, 1))
+        self.state = State(self.nfeatures, self.nports)
         self.pkt = Packet(0, 0)
         self.port = port
         self.firstRun = True
         self.node = None
         self.topology = None
+        self.rw1 = []
+        self.rw2 = []
+        self.rw3 = []
+        self.rw = []
+        self.meanrw = []
+        self.counter = 0
         filelog = open(self.id + "_rl_log.txt", "w")
         filelog.close()
 
@@ -154,6 +237,7 @@ class NetEnv (gym.Env):
                 print("connected by", self.addr)
                 if self.firstRun:
                     self.topology = topo.loadtopology()
+                    self.state.setTopo(self.topology)
                     self.node = self.topology.getNode(id)
                     self.firstRun = False
                 return
@@ -174,12 +258,11 @@ class NetEnv (gym.Env):
         interface = self.node.getPort(ifname)
         targetNode = self.topology.getNodeByIp(self.state.getCurDst())
         neighbor = interface.getNeighbor()
-        alpha = 1
+        dropped = 0
         if "h" in neighbor.getName():
-            if targetNode == neighbor.getName():
-                distance = 0.0001
-            else:
-                distance = 1000
+            distance = 0
+            if targetNode != neighbor.getName():
+                dropped = 1
         else:
             distance = neighbor.getDistance(targetNode)
 
@@ -201,11 +284,33 @@ class NetEnv (gym.Env):
 
         done = False
         qtime = self.pkt.getReward()
-        rw = makeRw(distance, qtime)
-        filelog = open(self.id + "_rl_log.txt", "a")
-        filelog.write("destination: " + targetNode + ", action: " + str(action) +
-            ", rw = " + str(rw) + " (distance: " + str(distance) + ", qtime: " + str(qtime) + ")\n")
-        filelog.close()
+        rw1, rw2, rw3, rw = makeRw(distance, qtime, dropped)
+        #filelog = open(self.id + "_rl_log.txt", "a")
+        #filelog.write("destination: " + targetNode + ", action: " + str(action) +
+        #    ", rw = [(" + str(rw1) + "\t\t" + str(rw2) + "\t\t" + str(rw3) + ") => " + str(rw) +
+        #    " ] (distance: " + str(distance) + ", qtime: " + str(qtime) + ")\n")
+        #filelog.close()
+        self.rw1.append(rw1)
+        self.rw2.append(rw2)
+        self.rw3.append(rw3)
+        self.rw.append(rw)
+        self.meanrw.append(sum(self.rw) / len(self.rw))
+        self.counter += 1
+        if (self.counter % 500) == 0:
+            plt.plot(range(len(self.rw1)), self.rw1)
+            plt.savefig(self.id + "_rw1.png")
+            plt.clf()
+            plt.plot(range(len(self.rw2)), self.rw2)
+            plt.savefig(self.id + "_rw2.png")
+            plt.clf()
+            plt.plot(range(len(self.rw3)), self.rw3)
+            plt.savefig(self.id + "_rw3.png")
+            plt.clf()
+            plt.ylim([minRw(), maxRw()])
+            plt.plot(range(len(self.rw)), self.rw)
+            plt.plot(range(len(self.rw)), self.meanrw)
+            plt.savefig(self.id + "_rw.png")
+            plt.clf()
         return self.state.makeNPArray(), rw, done, info
 
     def reset (self):
