@@ -13,14 +13,14 @@ import matplotlib.pyplot as plt
 
 PORT, HOST_IP = 1400, '0.0.0.0'
 MAX = 4294967295
-AH_LENGTH = 2
-FD_LENGTH = 2
+AH_LENGTH = 2 # max 5
+FD_LENGTH = 2 # max 5
 LAMBDA1 = 0
 LAMBDA2 = 0.5
 LAMBDA3 = 0.5
 NHOSTS = 4
 MAXPORTS = 5
-MAXQTIME = 10000
+MAXQTIME = 100000
 MINQTIME = 0
 MINDISTANCE = 0
 MAXDISTANCE = 4
@@ -28,19 +28,21 @@ MAXDISTANCE = 4
 def minRw ():
     delta1 = 0
     delta3 = 1
-    rw1 = LAMBDA1 * delta1 * (1 / (MAXDISTANCE + 1))
-    rw2 = LAMBDA2 * (1 / log(MAXQTIME + 10, 10))
+    seconds = MAXQTIME / 1000
+    rw1 = LAMBDA1 * MAXDISTANCE * delta1
+    rw2 = LAMBDA2 * seconds
     rw3 = LAMBDA3 * delta3
-    rw = rw1 + rw2 - rw3
+    rw = 0 - rw1 - rw2 - rw3
     return rw
 
 def maxRw ():
     delta1 = 1
     delta3 = 0
-    rw1 = LAMBDA1 * delta1 * (1 / (MINDISTANCE + 1))
-    rw2 = LAMBDA2 * (1 / log(MINQTIME + 10, 10))
+    seconds = MINQTIME / 1000
+    rw1 = LAMBDA1 * MINDISTANCE * delta1
+    rw2 = LAMBDA2 * seconds
     rw3 = LAMBDA3 * delta3
-    rw = rw1 + rw2 - rw3
+    rw = 0 - rw1 - rw2 - rw3
     return rw
 
 def makeRw (distance, qtime, dropped):
@@ -52,6 +54,22 @@ def makeRw (distance, qtime, dropped):
     rw2 = LAMBDA2 * (1 / log(qtime + 10, 10))
     rw3 = LAMBDA3 * delta3
     rw = rw1 + rw2 - rw3
+    return rw1, rw2, rw3, rw
+
+def makeRw2 (distance, qtime, dropped):
+    delta1 = 1
+    delta3 = dropped
+    if delta3 == 1:
+        delta1 = 0
+    if qtime > MAXQTIME:
+        qtime = MAXQTIME
+    if qtime < MINQTIME:
+        qtime = MINQTIME
+    seconds = qtime / 1000
+    rw1 = LAMBDA1 * distance * delta1
+    rw2 = LAMBDA2 * seconds
+    rw3 = LAMBDA3 * delta3
+    rw = 0 - rw1 - rw2 - rw3
     return rw1, rw2, rw3, rw
 
 def fill (vec, max):
@@ -223,6 +241,7 @@ class NetEnv (gym.Env):
         self.rw3 = []
         self.rw = []
         self.meanrw = []
+        self.tmpmean = []
         self.counter = 0
         filelog = open(self.id + "_rl_log.txt", "w")
         filelog.close()
@@ -284,18 +303,20 @@ class NetEnv (gym.Env):
 
         done = False
         qtime = self.pkt.getReward()
-        rw1, rw2, rw3, rw = makeRw(distance, qtime, dropped)
-        #filelog = open(self.id + "_rl_log.txt", "a")
-        #filelog.write("destination: " + targetNode + ", action: " + str(action) +
-        #    ", rw = [(" + str(rw1) + "\t\t" + str(rw2) + "\t\t" + str(rw3) + ") => " + str(rw) +
-        #    " ] (distance: " + str(distance) + ", qtime: " + str(qtime) + ")\n")
-        #filelog.close()
+        rw1, rw2, rw3, rw = makeRw2(distance, qtime, dropped)
+        filelog = open(self.id + "_rl_log.txt", "a")
+        filelog.write("destination: " + targetNode + ", action: " + str(action) +
+            ", rw = " + str(rw) + " (distance: " + str(distance) + ", qtime: " + str(qtime) + ")\n")
+        filelog.close()
         self.rw1.append(rw1)
         self.rw2.append(rw2)
         self.rw3.append(rw3)
         self.rw.append(rw)
-        self.meanrw.append(sum(self.rw) / len(self.rw))
         self.counter += 1
+        if (self.counter % 500) == 0:
+            self.tmpmean = []
+        self.tmpmean.append(rw)
+        self.meanrw.append(sum(self.tmpmean) / len(self.tmpmean))
         if (self.counter % 500) == 0:
             plt.plot(range(len(self.rw1)), self.rw1)
             plt.savefig(self.id + "_rw1.png")
