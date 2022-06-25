@@ -15,34 +15,52 @@ PORT, HOST_IP = 1400, '0.0.0.0'
 MAX = 4294967295
 AH_LENGTH = 2 # max 5
 FD_LENGTH = 2 # max 5
-LAMBDA1 = 0
+LAMBDA1 = 1
 LAMBDA2 = 0.5
-LAMBDA3 = 0.5
+LAMBDA3 = 1
+LAMBDA4 = 0.0005
 NHOSTS = 4
 MAXPORTS = 5
-MAXQTIME = 100000
+MAXQTIME = 10000
 MINQTIME = 0
-MINDISTANCE = 0
+MINDISTANCE = 1
 MAXDISTANCE = 4
+PLOT_FREQ = 1000
+PLOT_SOIL = 12000
+MEANSTEP = 250
 
-def minRw ():
+def minRw (isBackbone):
     delta1 = 0
-    delta3 = 1
-    seconds = MAXQTIME / 1000
-    rw1 = LAMBDA1 * MAXDISTANCE * delta1
+    if isBackbone:
+        delta3 = 0
+        delta4 = 1
+    else:
+        delta3 = 1
+        delta4 = 0
+    seconds = MAXQTIME / 1000000
+    #seconds = 10
+    rw1 = LAMBDA1 * delta1
     rw2 = LAMBDA2 * seconds
     rw3 = LAMBDA3 * delta3
-    rw = 0 - rw1 - rw2 - rw3
+    rw4 = LAMBDA4 * delta4 * MAXDISTANCE
+    rw = 0 + rw1 - rw2 - rw3 - rw4
     return rw
 
-def maxRw ():
-    delta1 = 1
+def maxRw (isBackbone):
+    if isBackbone:
+        delta1 = 0
+        delta4 = 1
+    else:
+        delta1 = 1
+        delta4 = 0
     delta3 = 0
-    seconds = MINQTIME / 1000
-    rw1 = LAMBDA1 * MINDISTANCE * delta1
+    seconds = MINQTIME / 1000000
+    #seconds = 0
+    rw1 = LAMBDA1 * delta1
     rw2 = LAMBDA2 * seconds
     rw3 = LAMBDA3 * delta3
-    rw = 0 - rw1 - rw2 - rw3
+    rw4 = LAMBDA4 * delta4 * MINDISTANCE
+    rw = 0 + rw1 - rw2 - rw3 - rw4
     return rw
 
 def makeRw (distance, qtime, dropped):
@@ -56,21 +74,24 @@ def makeRw (distance, qtime, dropped):
     rw = rw1 + rw2 - rw3
     return rw1, rw2, rw3, rw
 
-def makeRw2 (distance, qtime, dropped):
-    delta1 = 1
+def makeRw2 (distance, qtime, dropped, delivered, isBackbone):
+    delta1 = delivered
     delta3 = dropped
+    if isBackbone:
+        delta4 = 1
+    else:
+        delta4 = 0
     if delta3 == 1:
         delta1 = 0
     if qtime > MAXQTIME:
         qtime = MAXQTIME
-    if qtime < MINQTIME:
-        qtime = MINQTIME
-    seconds = qtime / 1000
-    rw1 = LAMBDA1 * distance * delta1
+    seconds = qtime / 1000000
+    rw1 = LAMBDA1 * delta1
     rw2 = LAMBDA2 * seconds
     rw3 = LAMBDA3 * delta3
-    rw = 0 - rw1 - rw2 - rw3
-    return rw1, rw2, rw3, rw
+    rw4 = LAMBDA4 * delta4 * distance
+    rw = 0 + rw1 - rw2 - rw3 - rw4
+    return rw1, rw2, rw3, rw4, rw
 
 def fill (vec, max):
     if (len(vec) < max):
@@ -206,7 +227,6 @@ class Packet:
 
 def parse_req (data):
     strdata = data.decode('UTF-8')
-    print(strdata)
     parsed = strdata.split(' ')
     if parsed[0] == 'GETP':
         destinations = FutureDestinations()
@@ -239,10 +259,12 @@ class NetEnv (gym.Env):
         self.rw1 = []
         self.rw2 = []
         self.rw3 = []
+        self.rw4 = []
         self.rw = []
         self.meanrw = []
         self.tmpmean = []
         self.counter = 0
+        self.resetvar = False
         filelog = open(self.id + "_rl_log.txt", "w")
         filelog.close()
 
@@ -278,10 +300,13 @@ class NetEnv (gym.Env):
         targetNode = self.topology.getNodeByIp(self.state.getCurDst())
         neighbor = interface.getNeighbor()
         dropped = 0
+        delivered = 0
         if "h" in neighbor.getName():
             distance = 0
             if targetNode != neighbor.getName():
                 dropped = 1
+            else:
+                delivered = 1
         else:
             distance = neighbor.getDistance(targetNode)
 
@@ -293,7 +318,6 @@ class NetEnv (gym.Env):
             if not data:
                 print("no data")
                 return self.state.makeNPArray(), self.pkt.getReward(), True, info
-            print("================ Packet received! ================")
             self.pkt = parse_req(data)
             self.state.setDsts(self.pkt.getDsts())
         except Exception as e:
@@ -302,49 +326,71 @@ class NetEnv (gym.Env):
             self.s.close()
 
         done = False
+        isBackbone = "s" in self.id
         qtime = self.pkt.getReward()
-        rw1, rw2, rw3, rw = makeRw2(distance, qtime, dropped)
+        rw1, rw2, rw3, rw4, rw = makeRw2(distance, qtime, dropped, delivered, isBackbone)
         filelog = open(self.id + "_rl_log.txt", "a")
+        '''
         filelog.write("destination: " + targetNode + ", action: " + str(action) +
             ", rw = " + str(rw) + " (distance: " + str(distance) + ", qtime: " + str(qtime) + ")\n")
         filelog.close()
+        '''
         self.rw1.append(rw1)
         self.rw2.append(rw2)
         self.rw3.append(rw3)
+        self.rw4.append(rw4)
         self.rw.append(rw)
         self.counter += 1
-        if (self.counter % 500) == 0:
+        if (self.counter % MEANSTEP) == 0:
             self.tmpmean = []
         self.tmpmean.append(rw)
         self.meanrw.append(sum(self.tmpmean) / len(self.tmpmean))
-        if (self.counter % 500) == 0:
-            plt.plot(range(len(self.rw1)), self.rw1)
-            plt.savefig(self.id + "_rw1.png")
-            plt.clf()
-            plt.plot(range(len(self.rw2)), self.rw2)
-            plt.savefig(self.id + "_rw2.png")
-            plt.clf()
-            plt.plot(range(len(self.rw3)), self.rw3)
-            plt.savefig(self.id + "_rw3.png")
-            plt.clf()
-            plt.ylim([minRw(), maxRw()])
-            plt.plot(range(len(self.rw)), self.rw)
-            plt.plot(range(len(self.rw)), self.meanrw)
-            plt.savefig(self.id + "_rw.png")
+        if (self.counter % PLOT_FREQ) == 0 and self.counter >= PLOT_SOIL:
+            fig, axs = plt.subplot_mosaic([
+                ["upL", "upR"],
+                ["midL", "midR"],
+                ["low", "low"]
+            ], constrained_layout = True)
+            plrw1 = axs["upL"]
+            plrw2 = axs["upR"]
+            plrw3 = axs["midL"]
+            plrw4 = axs["midR"]
+            plrw = axs["low"]
+            plrw1.plot(range(len(self.rw1)), self.rw1)
+            plrw1.set_title("rw1 = LAMBDA1 * delta1")
+            plrw2.plot(range(len(self.rw2)), self.rw2)
+            plrw2.set_title("rw2 = LAMBDA2 * seconds")
+            plrw3.plot(range(len(self.rw3)), self.rw3)
+            plrw3.set_title("rw3 = LAMBDA3 * delta3")
+            plrw4.axis(ymin=LAMBDA4*MINDISTANCE, ymax=LAMBDA4*MAXDISTANCE)
+            plrw4.plot(range(len(self.rw4)), self.rw4)
+            plrw4.set_title("rw4 = LAMBDA4 * delta4 * distance")
+            plrw.axis(ymin=minRw(isBackbone), ymax=maxRw(isBackbone))
+            plrw.plot(range(len(self.rw)), self.rw)
+            plrw.plot(range(len(self.rw)), self.meanrw)
+            plrw.set_title("rw = rw1 - rw2 - rw3 - rw4")
+            plt.rcParams["figure.figsize"] = (20,10)
+            plt.savefig(self.id + "_rw.png", dpi = 300)
             plt.clf()
         return self.state.makeNPArray(), rw, done, info
 
     def reset (self):
         # listen on socket
             # as msg arrives store fields in state, drop reward
+        if not self.resetvar:
+            try:
+                data = self.conn.recv(512)
+                if not data:
+                    return
+                pkt = parse_req(data)
+                self.state.setDsts(pkt.getDsts())
+            except Exception:
+                self.conn.close()
+                self.s.close()
 
-        try:
-            data = self.conn.recv(512)
-            if not data:
-                return
-            print("================ Packet received! ================")
-            pkt = parse_req(data)
-            self.state.setDsts(pkt.getDsts())
-        except Exception:
-            self.conn.close()
-            self.s.close()
+        self.resetvar = True
+
+        return self.state.makeNPArray()
+
+    def render (self, mode="human", close=False):
+        print("render called")
