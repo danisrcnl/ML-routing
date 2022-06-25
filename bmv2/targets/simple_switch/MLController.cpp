@@ -16,6 +16,7 @@
 
 #define PORT "1500"
 #define IP "0.0.0.0"
+#define RWS_SIZE 100000
 #define LOG "[MLController.cpp] "
 
 using namespace std;
@@ -86,7 +87,7 @@ class MLController : public ExternType {
     c->pop(pos.get<int>());
   }
 
-  void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort, Data& doForward) {
+  void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort, Data& doForward, Data& id) {
     if (debug) cout << LOG << "Into getOutputPort" << endl;
     if (MLController::hosts.empty())
       MLController::hosts = parseMac();
@@ -97,12 +98,23 @@ class MLController : public ExternType {
     checkHost(mac);
     checkPy();
     if (debug) cout << LOG << "sending socket request to get output port" << endl;
-    uint32_t lastRw = rewards.pop();
+    //uint32_t lastRw = rewards.pop();
+
+    id = static_cast<Data>(MLController::nextId);
+    uint32_t lastRw;
+    if (MLController::nextId != 0) {
+      lastRw = MLController::rws[MLController::nextRw];
+      MLController::nextRw = (MLController::nextRw + 1) % RWS_SIZE;
+    }
+    else
+      lastRw = 0;
+
     int port = py->getPort(c->get(pos.get<int>()), lastRw, *c);
     if (port == -1)
       doForward = static_cast<Data>(0);
     doForward = static_cast<Data>(1);
     outPort = static_cast<Data>(port);
+    MLController::nextId = (MLController::nextId + 1) % RWS_SIZE;
   }
 
   // receives mac of router to identify it, uses that field to write the mac of the chosen neighbor
@@ -123,12 +135,16 @@ class MLController : public ExternType {
     doForward = static_cast<Data>(1);
   }
 
-  void sendReward(const Data& valid_bool, const Data& qtime) {
+  void sendReward(const Data& valid_bool, const Data& qtime, const Data& id) {
     // qtime will be bit<32> deq_timedelta in p4
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
-    if (debug) cout << LOG << "storing reward in rws queue" << endl;
-    rewards.push(qtime.get<uint32_t>());
+    if (debug) cout << LOG << "storing reward in rws" << endl;
+    //rewards.push(qtime.get<uint32_t>());
+
+    uint32_t id_int = id.get<uint32_t>();
+    MLController::rws[id_int] = qtime.get<uint32_t>();
+
   }
 
   void setAsIngress () {
@@ -189,6 +205,9 @@ private:
   static unordered_map <string, ConcurrentCBuffer*> ccbuffers;
   static unordered_map <string, PyModule*> pyS;
   static unordered_map <uint64_t, string> hosts;
+  static unordered_map <uint32_t, uint32_t> rws;
+  static uint32_t nextId;
+  static uint32_t nextRw;
   bool firstRun;
   RewardsQ rewards;
   static unordered_map <string, int> packet_counter;
@@ -256,14 +275,17 @@ unordered_map <string, PyModule*> MLController::pyS;
 unordered_map <uint64_t, string> MLController::hosts;
 unordered_map <string, int> MLController::packet_counter;
 unordered_map <string, ConcurrentCBuffer*> MLController::ccbuffers;
+unordered_map <uint32_t, uint32_t> MLController::rws;
+uint32_t MLController::nextId = 0;
+uint32_t MLController::nextRw = 0;
 
 BM_REGISTER_EXTERN(MLController);
 BM_REGISTER_EXTERN_METHOD(MLController, simulate_computation);
 BM_REGISTER_EXTERN_METHOD(MLController, print);
 BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, const Data&, Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, const Data&, Data&, Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, const Data&, Data&, Data&, Data&);
+BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&, const Data&);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsIngress);
 BM_REGISTER_EXTERN_METHOD(MLController, setAsEgress);
 BM_REGISTER_EXTERN_METHOD(MLController, getNeighborMac, Data&, const Data&, Data&);
