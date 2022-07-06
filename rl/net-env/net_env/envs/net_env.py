@@ -16,9 +16,9 @@ MAX = 4294967295
 AH_LENGTH = 2 # max 5
 FD_LENGTH = 2 # max 5
 LAMBDA1 = 1
-LAMBDA2 = 0.5
+LAMBDA2 = 5 #0.5
 LAMBDA3 = 1
-LAMBDA4 = 0.0005
+LAMBDA4 = 0.005 #0.0005
 NHOSTS = 4
 MAXPORTS = 5
 MAXQTIME = 10000
@@ -26,7 +26,7 @@ MINQTIME = 0
 MINDISTANCE = 1
 MAXDISTANCE = 4
 PLOT_FREQ = 1000
-PLOT_SOIL = 12000
+PLOT_SOIL = 0
 MEANSTEP = 250
 
 def minRw (isBackbone):
@@ -262,11 +262,13 @@ class NetEnv (gym.Env):
         self.rw4 = []
         self.rw = []
         self.meanrw = []
+        self.meanrw2 = []
         self.tmpmean = []
+        self.tmpmean2 = []
         self.counter = 0
         self.resetvar = False
-        filelog = open(self.id + "_rl_log.txt", "w")
-        filelog.close()
+        #filelog = open(self.id + "_rl_log.txt", "w")
+        #filelog.close()
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             self.s = s
@@ -275,6 +277,7 @@ class NetEnv (gym.Env):
             while True:
                 print("listening on address " + HOST_IP + ", port " + str(self.port) + "...")
                 self.conn, self.addr = self.s.accept()
+                #self.conn.settimeout(20)
                 print("connected by", self.addr)
                 if self.firstRun:
                     self.topology = topo.loadtopology()
@@ -329,8 +332,9 @@ class NetEnv (gym.Env):
         isBackbone = "s" in self.id
         qtime = self.pkt.getReward()
         rw1, rw2, rw3, rw4, rw = makeRw2(distance, qtime, dropped, delivered, isBackbone)
-        filelog = open(self.id + "_rl_log.txt", "a")
         '''
+        filelog = open(self.id + "_rl_log.txt", "a")
+
         filelog.write("destination: " + targetNode + ", action: " + str(action) +
             ", rw = " + str(rw) + " (distance: " + str(distance) + ", qtime: " + str(qtime) + ")\n")
         filelog.close()
@@ -343,8 +347,11 @@ class NetEnv (gym.Env):
         self.counter += 1
         if (self.counter % MEANSTEP) == 0:
             self.tmpmean = []
+            self.tmpmean2 = []
         self.tmpmean.append(rw)
+        self.tmpmean2.append(rw2)
         self.meanrw.append(sum(self.tmpmean) / len(self.tmpmean))
+        self.meanrw2.append(sum(self.tmpmean2) / len(self.tmpmean2))
         if (self.counter % PLOT_FREQ) == 0 and self.counter >= PLOT_SOIL:
             fig, axs = plt.subplot_mosaic([
                 ["upL", "upR"],
@@ -358,7 +365,9 @@ class NetEnv (gym.Env):
             plrw = axs["low"]
             plrw1.plot(range(len(self.rw1)), self.rw1)
             plrw1.set_title("rw1 = LAMBDA1 * delta1")
+            plrw2.axis(ymin=0, ymax=(MAXQTIME*LAMBDA2 / 1000000))
             plrw2.plot(range(len(self.rw2)), self.rw2)
+            plrw2.plot(range(len(self.meanrw2)), self.meanrw2)
             plrw2.set_title("rw2 = LAMBDA2 * seconds")
             plrw3.plot(range(len(self.rw3)), self.rw3)
             plrw3.set_title("rw3 = LAMBDA3 * delta3")
