@@ -261,6 +261,7 @@ class NetEnv (gym.Env):
         self.rw3 = []
         self.rw4 = []
         self.rw = []
+        self.sumrw = 0
         self.meanrw = []
         self.meanrw2 = []
         self.tmpmean = []
@@ -344,6 +345,7 @@ class NetEnv (gym.Env):
         self.rw3.append(rw3)
         self.rw4.append(rw4)
         self.rw.append(rw)
+        self.sumrw += rw
         self.counter += 1
         if (self.counter % MEANSTEP) == 0:
             self.tmpmean = []
@@ -381,6 +383,7 @@ class NetEnv (gym.Env):
             plt.rcParams["figure.figsize"] = (20,10)
             plt.savefig(self.id + "_rw.png", dpi = 300)
             plt.clf()
+        print(self.sumrw / len(self.rw))
         return self.state.makeNPArray(), rw, done, info
 
     def reset (self):

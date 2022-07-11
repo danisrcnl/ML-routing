@@ -17,8 +17,8 @@
 #define PORT "1500"
 #define IP "0.0.0.0"
 #define RWS_SIZE 100000
-#define LOG "[MLController.cpp] "
-#define UPDATE_FREQUENCY 500
+#define LOG "[MLController_periodic_incpp.cpp] "
+#define UPDATE_FREQUENCY 1000
 
 using namespace std;
 
@@ -30,20 +30,21 @@ using bm::Header;
 using bm::PHV;
 using bm::ExternType;
 
-class MLController : public ExternType {
+class MLController_periodic_incpp : public ExternType {
  public:
 
   BM_EXTERN_ATTRIBUTES {
   }
 
   void init() override {
-    if (debug) cout << LOG << "Building instance of MLController..." << endl;
+    if (debug) cout << LOG << "Building instance of MLController_periodic_incpp..." << endl;
     debug = true;
     firstRun = true;
     isIngress = true;
     py = nullptr;
     c = nullptr;
     host = "nullhost";
+    counter = 0;
   }
 
   void simulate_computation () {
@@ -56,7 +57,7 @@ class MLController : public ExternType {
     c->show();
   }
 
-  void pushAddr(const Data& mac, const Data& address, Data& pos, const Data& valid_bool, Data& update_entry) {
+  void pushAddr(const Data& mac, const Data& address, Data& pos, const Data& valid_bool) {
 
     if (firstRun) {
       if (debug) cout << LOG << "First run, going sleep 10 seconds to wait for topology.db" << endl;
@@ -67,27 +68,14 @@ class MLController : public ExternType {
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
     if (debug) cout << LOG << "push called for address " << showAddr(address.get<uint32_t>()) << endl;
-    if (MLController::hosts.empty())
-      MLController::hosts = parseMac();
+    if (MLController_periodic_incpp::hosts.empty())
+      MLController_periodic_incpp::hosts = parseMac();
 
     checkHost(mac);
     checkCCBuffer();
 
-    int update_entry_int = 0;
-
-    uint32_t address_int = address.get<uint32_t>();
-    if (counters.find(address_int) == counters.end()) {
-      counters[address_int] = 0;
-      update_entry_int = 1;
-    }
-    if (++counters[address_int] == UPDATE_FREQUENCY) {
-      counters[address_int] = 0;
-      update_entry_int = 1;
-    }
-
-    int ret = c->push(address_int);
+    int ret = c->push(address.get<uint32_t>());
     pos = static_cast<Data>(ret);
-    update_entry = static_cast<Data>(update_entry_int);
   }
 
   void popAddr(const Data& mac, const Data& pos, const Data& valid_bool) {
@@ -102,9 +90,13 @@ class MLController : public ExternType {
   }
 
   void getOutputPort(const Data& mac, const Data& pos, const Data& valid_bool, Data& outPort, Data& doForward, Data& id) {
+    if (counter++ == UPDATE_FREQUENCY) {
+      counter = 0;
+      routing_table.clear();
+    }
     if (debug) cout << LOG << "Into getOutputPort" << endl;
-    if (MLController::hosts.empty())
-      MLController::hosts = parseMac();
+    if (MLController_periodic_incpp::hosts.empty())
+      MLController_periodic_incpp::hosts = parseMac();
 
     if (valid_bool.get<int>() == 0) // set by p4 app if ipv4 parsing happened
       return;
@@ -112,14 +104,24 @@ class MLController : public ExternType {
     checkHost(mac);
     checkPy();
 
+    /* check for routing_table, if no entry, then ask to py */
+
+    if (!(routing_table.find(c->get(pos.get<int>())) == routing_table.end()))  {
+      doForward = static_cast<Data>(1);
+      outPort = static_cast<Data>(routing_table[c->get(pos.get<int>())]);
+      return;
+    }
+
+    /* end check */
+
     if (debug) cout << LOG << "sending socket request to get output port" << endl;
     //uint32_t lastRw = rewards.pop();
 
-    id = static_cast<Data>(MLController::nextId);
+    id = static_cast<Data>(MLController_periodic_incpp::nextId);
     uint32_t lastRw;
-    if (MLController::nextId != 0) {
-      lastRw = MLController::rws[MLController::nextRw];
-      MLController::nextRw = (MLController::nextRw + 1) % RWS_SIZE;
+    if (MLController_periodic_incpp::nextId != 0) {
+      lastRw = MLController_periodic_incpp::rws[MLController_periodic_incpp::nextRw];
+      MLController_periodic_incpp::nextRw = (MLController_periodic_incpp::nextRw + 1) % RWS_SIZE;
     }
     else
       lastRw = 0;
@@ -127,11 +129,10 @@ class MLController : public ExternType {
     int port = py->getPort(c->get(pos.get<int>()), lastRw, *c);
     if (port == -1)
       doForward = static_cast<Data>(0);
-    //routing_table[c->get(pos.get<int>())] = port;
+    routing_table[c->get(pos.get<int>())] = port;
     doForward = static_cast<Data>(1);
     outPort = static_cast<Data>(port);
-    MLController::nextId = (MLController::nextId + 1) % RWS_SIZE;
-    //update_routes(showAddr(c->get(pos.get<int>())), port);
+    MLController_periodic_incpp::nextId = (MLController_periodic_incpp::nextId + 1) % RWS_SIZE;
   }
 
   // receives mac of router to identify it, uses that field to write the mac of the chosen neighbor
@@ -160,7 +161,7 @@ class MLController : public ExternType {
     //rewards.push(qtime.get<uint32_t>());
 
     uint32_t id_int = id.get<uint32_t>();
-    MLController::rws[id_int] = qtime.get<uint32_t>();
+    MLController_periodic_incpp::rws[id_int] = qtime.get<uint32_t>();
 
   }
 
@@ -189,7 +190,7 @@ class MLController : public ExternType {
     uint64_t macsrc_int = macsrc.get<uint64_t>();
     uint64_t macdst_int = macdst.get<uint64_t>();
     int in_port_int = in_port.get<int>();
-    ofs << "src: " + MLController::hosts[macsrc_int] + ", dst: " + MLController::hosts[macdst_int] + ", port: " + std::to_string(in_port_int) + " [dropped]"<< endl;
+    ofs << "src: " + MLController_periodic_incpp::hosts[macsrc_int] + ", dst: " + MLController_periodic_incpp::hosts[macdst_int] + ", port: " + std::to_string(in_port_int) + " [dropped]"<< endl;
     ofs.close();
   }
 
@@ -204,15 +205,15 @@ class MLController : public ExternType {
     uint32_t ipdst_int = ipdst.get<uint32_t>();
     int in_port_int = in_port.get<int>();
     int out_port_int = out_port.get<int>();
-    ofs << "(" + string(showAddr(ipdst_int)) + ") src: " + MLController::hosts[macsrc_int] + ", dst: " +
-      MLController::hosts[macdst_int] + ", port: " +
-      std::to_string(in_port_int) + " [forwarded to " + MLController::hosts[destination_int] +
+    ofs << "(" + string(showAddr(ipdst_int)) + ") src: " + MLController_periodic_incpp::hosts[macsrc_int] + ", dst: " +
+      MLController_periodic_incpp::hosts[macdst_int] + ", port: " +
+      std::to_string(in_port_int) + " [forwarded to " + MLController_periodic_incpp::hosts[destination_int] +
       ", port " + std::to_string(out_port_int) + "] (count = " +
-      std::to_string(++MLController::packet_counter[host]) + ")" << endl;
+      std::to_string(++MLController_periodic_incpp::packet_counter[host]) + ")" << endl;
     ofs.close();
   }
 
-  virtual ~MLController () {}
+  virtual ~MLController_periodic_incpp () {}
 
 private:
   bool isIngress;
@@ -224,7 +225,7 @@ private:
   static unordered_map <uint64_t, string> hosts;
   static unordered_map <uint32_t, uint32_t> rws;
   unordered_map <uint32_t, int> routing_table;
-  unordered_map <uint32_t, int> counters;
+  int counter;
   static uint32_t nextId;
   static uint32_t nextRw;
   bool firstRun;
@@ -232,58 +233,6 @@ private:
   static unordered_map <string, int> packet_counter;
   bool debug;
   std::mutex log_f_mutex;
-  std::mutex routes_mutex;
-
-  string make_route (char* dst) {
-    string ip(dst);
-    int count_dots = 0, i = 0, last_dot = 0;
-    while (count_dots < 3) {
-      if (ip[i] == '.') {
-        count_dots++;
-        last_dot = i;
-      }
-      i++;
-    }
-    ip.resize(last_dot + 1);
-    string tba = "0/24";
-    ip.insert(last_dot + 1, tba);
-    return ip;
-  }
-
-  void update_routes (char* dst, int port) {
-    lock_guard<std::mutex> lk(routes_mutex);
-    string ip = make_route(dst);
-    ifstream ifs;
-    ofstream ofs;
-    ifs.open(host + "_commands.txt");
-    ofs.open(host + "_commands-tmp.txt");
-    string str_tmp;
-    string mac_next_hop = showMac(getNeighbor(host, port));
-    string new_route = "table_add ipv4_lpm ipv4_forward " + ip + " => " + mac_next_hop + " " + std::to_string(port);
-    bool found = false;
-    while (std::getline(ifs, str_tmp)) {
-      if (str_tmp.find(ip) != string::npos) {
-        str_tmp = new_route;
-        found = true;
-      }
-      ofs << str_tmp << endl;
-    }
-    if (!found)
-      ofs << new_route << endl;
-    ifs.close();
-    ofs.close();
-    remove((host + "_commands.txt").c_str());
-    rename((host + "_commands-tmp.txt").c_str(), (host + "_commands.txt").c_str());
-    int thrift_port_int = 9089;
-    if (host[0] == 's')
-      thrift_port_int += 4;
-    int offset = host[1] - '0';
-    thrift_port_int += offset;
-    string thrift_port = std::to_string(thrift_port_int);
-    int ret = system(("simple_switch_CLI --thrift-port " + thrift_port + " < " + host + "_commands.txt").c_str());
-    if (ret < 0)
-      throw std::runtime_error("system failed");
-  }
 
   char* showAddr(uint32_t ip) {
     struct in_addr ip_addr;
@@ -295,32 +244,20 @@ private:
     stringstream ss;
     ss << hex << mac;
     string macString = ss.str();
-    int diff = 12 - macString.length();
-    for (int i = 0; i < diff; i++)
-        macString.insert(0, 1, '0');
-    string out_str;
-    int j = 0;
-    for (int i = 0; i < (int)(macString.length()); i++) {
-        out_str.insert(j, 1, macString[i]);
-        if ((i + 1) % 2 == 0 && i != (int)(macString.length() - 1))
-            out_str.insert(++j, 1, ':');
-        j++;
-    }
-    return out_str;
-}
+    return macString;
+  }
 
   void checkHost (const Data& mac) {
     if (host == "nullhost") {
-      if (MLController::hosts.find(mac.get<uint64_t>()) == MLController::hosts.end()) {
+      if (MLController_periodic_incpp::hosts.find(mac.get<uint64_t>()) == MLController_periodic_incpp::hosts.end()) {
         if (debug) cout << LOG << "Mac " << showMac(mac.get<uint64_t>()) << " not found" << endl;
         return;
       }
-      host = MLController::hosts[mac.get<uint64_t>()];
+      host = MLController_periodic_incpp::hosts[mac.get<uint64_t>()];
       if (debug) cout << LOG << "Mac address " << showMac(mac.get<uint64_t>()) << " is associated to node " << host << endl;
       ofstream ofs;
-      string filename = host + "_commands.txt";
+      string filename = "fw_drop_log_" + host + ".txt";
       ofs.open(filename, std::ofstream::out | std::ofstream::trunc);
-      ofs << "table_set_default ipv4_lpm drop" << endl;
       ofs.close();
     }
     else
@@ -328,7 +265,7 @@ private:
   }
 
   int checkDestination (uint64_t mac_int) {
-    if (MLController::hosts.find(mac_int) == MLController::hosts.end()) {
+    if (MLController_periodic_incpp::hosts.find(mac_int) == MLController_periodic_incpp::hosts.end()) {
       if (debug) cout << LOG << "Address not associated to a node, not forwarding" << endl;
       return -1;
     }
@@ -339,43 +276,43 @@ private:
     if (host == "nullhost")
       return;
     if (py == nullptr) {
-      if (MLController::pyS.find(host) == MLController::pyS.end())
-        MLController::pyS[host] = new PyModule(host);
-      py = MLController::pyS[host];
+      if (MLController_periodic_incpp::pyS.find(host) == MLController_periodic_incpp::pyS.end())
+        MLController_periodic_incpp::pyS[host] = new PyModule(host);
+      py = MLController_periodic_incpp::pyS[host];
     }
   }
 
   void checkCCBuffer () {
     if (c == nullptr) {
-      if (MLController::ccbuffers.find(host) == MLController::ccbuffers.end())
-        MLController::ccbuffers[host] = new ConcurrentCBuffer();
-      c = MLController::ccbuffers[host];
+      if (MLController_periodic_incpp::ccbuffers.find(host) == MLController_periodic_incpp::ccbuffers.end())
+        MLController_periodic_incpp::ccbuffers[host] = new ConcurrentCBuffer();
+      c = MLController_periodic_incpp::ccbuffers[host];
     }
   }
 };
 
-unordered_map <string, PyModule*> MLController::pyS;
-unordered_map <uint64_t, string> MLController::hosts;
-unordered_map <string, int> MLController::packet_counter;
-unordered_map <string, ConcurrentCBuffer*> MLController::ccbuffers;
-unordered_map <uint32_t, uint32_t> MLController::rws;
-uint32_t MLController::nextId = 0;
-uint32_t MLController::nextRw = 0;
+unordered_map <string, PyModule*> MLController_periodic_incpp::pyS;
+unordered_map <uint64_t, string> MLController_periodic_incpp::hosts;
+unordered_map <string, int> MLController_periodic_incpp::packet_counter;
+unordered_map <string, ConcurrentCBuffer*> MLController_periodic_incpp::ccbuffers;
+unordered_map <uint32_t, uint32_t> MLController_periodic_incpp::rws;
+uint32_t MLController_periodic_incpp::nextId = 0;
+uint32_t MLController_periodic_incpp::nextRw = 0;
 
-BM_REGISTER_EXTERN(MLController);
-BM_REGISTER_EXTERN_METHOD(MLController, simulate_computation);
-BM_REGISTER_EXTERN_METHOD(MLController, print);
-BM_REGISTER_EXTERN_METHOD(MLController, pushAddr, const Data&, const Data&, Data&, const Data&, Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, popAddr, const Data&, const Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, getOutputPort, const Data&, const Data&, const Data&, Data&, Data&, Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, sendReward, const Data&, const Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, setAsIngress);
-BM_REGISTER_EXTERN_METHOD(MLController, setAsEgress);
-BM_REGISTER_EXTERN_METHOD(MLController, getNeighborMac, Data&, const Data&, Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, logFw, const Data&, const Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, logDrop_f, const Data&, const Data&, const Data&);
-BM_REGISTER_EXTERN_METHOD(MLController, logFw_f, const Data&, const Data&, const Data&, const Data&, const Data&, const Data&);
+BM_REGISTER_EXTERN(MLController_periodic_incpp);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, simulate_computation);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, print);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, pushAddr, const Data&, const Data&, Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, popAddr, const Data&, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, getOutputPort, const Data&, const Data&, const Data&, Data&, Data&, Data&);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, sendReward, const Data&, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, setAsIngress);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, setAsEgress);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, getNeighborMac, Data&, const Data&, Data&);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, logFw, const Data&, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, logDrop_f, const Data&, const Data&, const Data&);
+BM_REGISTER_EXTERN_METHOD(MLController_periodic_incpp, logFw_f, const Data&, const Data&, const Data&, const Data&, const Data&, const Data&);
 
-int import_ml_controller() {
+int import_ml_controller_periodic_incpp() {
   return 0;
 }

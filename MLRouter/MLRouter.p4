@@ -9,10 +9,10 @@ extern MLController {
     MLController();
     void simulate_computation();
     void print();
-    void pushAddr(in macAddr_t mac, in ip4Addr_t address, inout bit<32> pos, in bit<1> valid_bool);
+    void pushAddr(in macAddr_t mac, in ip4Addr_t address, inout bit<32> pos, in bit<1> valid_bool, inout bit<1> update_entry);
     void popAddr(in macAddr_t mac, in bit<32> pos, in bit<1> valid_bool);
-    void getOutputPort(in macAddr_t mac, in bit<32> pos, in bit<1> valid_bool, inout bit<9> outPort, inout bit<1> doForward);
-    void sendReward(in bit<1> valid_bool, in bit<32> qTime);
+    void getOutputPort(in macAddr_t mac, in bit<32> pos, in bit<1> valid_bool, inout bit<9> outPort, inout bit<1> doForward, inout bit<32> id);
+    void sendReward(in bit<1> valid_bool, in bit<32> qTime, in bit<32> id);
     void setAsIngress();
     void setAsEgress();
     void getNeighborMac(inout macAddr_t mac, in bit<9> port, inout bit<1> doForward);
@@ -43,6 +43,11 @@ control MyIngress(inout headers hdr,
     bit<9> outP = 0x0;
     macAddr_t dstMac;
     bit<1> fw = 0;
+    bit<1> update_entry = 0;
+
+    action drop () {
+        mark_to_drop();
+    }
 
     action setAsIngress() {
         ml_controller.setAsIngress();
@@ -53,11 +58,11 @@ control MyIngress(inout headers hdr,
     }
 
     action choosePort() {
-        ml_controller.getOutputPort(hdr.ethernet.dstAddr, meta.identifier, meta.valid_bool, outP, fw);
+        ml_controller.getOutputPort(hdr.ethernet.dstAddr, meta.identifier, meta.valid_bool, outP, fw, meta.id);
     }
 
     action pushAddress() {
-        ml_controller.pushAddr(hdr.ethernet.dstAddr, hdr.ipv4.dstAddr, meta.identifier, meta.valid_bool);
+        ml_controller.pushAddr(hdr.ethernet.dstAddr, hdr.ipv4.dstAddr, meta.identifier, meta.valid_bool, update_entry);
     }
 
     action getNeighbor(bit<9> port) {
@@ -65,31 +70,53 @@ control MyIngress(inout headers hdr,
         ml_controller.getNeighborMac(dstMac, port, fw);
     }
 
-    action ipv4_forward(macAddr_t dstAddr, bit<9> port) {
+    action ipv4_forward_rl(macAddr_t dstAddr, bit<9> port) {
         standard_metadata.egress_spec = port;
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = dstAddr;
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
+    action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
+        standard_metadata.egress_spec = port;
+        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
+        hdr.ethernet.dstAddr = dstAddr;
+        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+    }
+
+    table ipv4_lpm {
+        key = {
+            hdr.ipv4.dstAddr: lpm;
+        }
+        actions = {
+            ipv4_forward;
+            drop;
+            NoAction;
+        }
+        size = 1024;
+        default_action = drop();
+    }
+
     apply {
         setAsIngress();
         pushAddress();
-        choosePort();
-        if (fw == 1) {
-            getNeighbor(outP);
+        if (update_entry == 1) {
+            choosePort();
             if (fw == 1) {
-                ml_controller.logFw_f(hdr.ethernet.srcAddr, hdr.ethernet.dstAddr, hdr.ipv4.dstAddr, standard_metadata.ingress_port, outP, dstMac);
-                ipv4_forward(dstMac, outP);
+                getNeighbor(outP);
+                if (fw == 1) {
+                    ipv4_forward_rl(dstMac, outP);
+                }
+                if (fw == 0) {
+                    mark_to_drop();
+                }
             }
             if (fw == 0) {
-                ml_controller.logDrop_f(hdr.ethernet.srcAddr, hdr.ethernet.dstAddr, standard_metadata.ingress_port);
                 mark_to_drop();
             }
         }
-        if (fw == 0) {
-            ml_controller.logDrop_f(hdr.ethernet.srcAddr, hdr.ethernet.dstAddr, standard_metadata.ingress_port);
-            mark_to_drop();
+        if (update_entry == 0 && hdr.ipv4.isValid()) {
+            ipv4_lpm.apply();
         }
 
     }
@@ -121,7 +148,7 @@ control MyEgress(inout headers hdr,
     apply {
         setAsEgress();
         popAddress();
-        ml_controller.sendReward(meta.valid_bool, standard_metadata.deq_timedelta);
+        ml_controller.sendReward(meta.valid_bool, standard_metadata.deq_timedelta, meta.id);
     }
 }
 
@@ -130,7 +157,24 @@ control MyEgress(inout headers hdr,
 *************************************************************************/
 
 control MyComputeChecksum(inout headers hdr, inout metadata meta) {
+    Checksum16() ckip;
+
      apply {
+
+         hdr.ipv4.hdrChecksum = ckip.get({
+             hdr.ipv4.version,
+             hdr.ipv4.ihl,
+             hdr.ipv4.dscp,
+             hdr.ipv4.ecn,
+             hdr.ipv4.totalLen,
+             hdr.ipv4.identification,
+             hdr.ipv4.flags,
+             hdr.ipv4.fragOffset,
+             hdr.ipv4.ttl,
+             hdr.ipv4.protocol,
+             hdr.ipv4.srcAddr,
+             hdr.ipv4.dstAddr
+         });
 
     }
 }

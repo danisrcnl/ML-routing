@@ -13,6 +13,8 @@ simple_switch.cpp simple_switch.h primitives.cpp \
 custom_extern.cpp \
 socket_extern.cpp \
 MLController.cpp \
+MLController_for_testing.cpp \
+MyLogger.cpp \
 address.h \
 pymodule.h \
 ccbuffer.h \
