@@ -144,11 +144,15 @@ control MyEgress(inout headers hdr,
     action printArray() {
         ml_controller.print();
     }
+    
+    action sendReward() {
+        ml_controller.sendReward(meta.valid_bool, standard_metadata.deq_timedelta, meta.id);
+    }
 
     apply {
         setAsEgress();
         popAddress();
-        ml_controller.sendReward(meta.valid_bool, standard_metadata.deq_timedelta, meta.id);
+        sendReward();
     }
 }
 
