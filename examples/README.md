@@ -1,49 +1,10 @@
-# p4 module
-
-Base P4-utils code used to support custom extern implementation has been provided by [this repository](https://github.com/engjefersonsantiago/p4-programs).
-
-All the information you need to install it are below.
-
-## Table of contents
-- [How to install](#how-to-install)
-- [Custom extern implementation step by step](#custom-extern-implementation-step-by-step)
-
-## How to install
-
-- inside **bmv2**
-```bash
-cd bmv2
-./autogen.sh
-./configure
-make -j4
-sudo make install
-```
-
-- inside **p4c**
-```bash
-./bootstrap.sh
-cd build
-make -j4
-sudo make install
-```
-
-- inside **p4c-bmv2**
-```bash
-pip install -r requirements_v1_1.txt
-```
-
-- inside **p4-utils**:
-```bash
-./install.sh
-```
-
-## Custom extern implementation step by step
+# Custom extern implementation step by step
 
 Be sure you're using p4c and bmv2 modules from this repository, as they've been modified right to support JSON generation of custom externs, which is not natively supported by p4.
 
 We're going to modify **bmv2** to implement a simple extern called CustomExtern (it's already implemented into this repository).
 
-### 1. Create custom_extern.cpp
+## 1. Create custom_extern.cpp
 
 ```bash
 cd bmv2/targets/simple_switch
@@ -106,7 +67,7 @@ int import_custom_extern() {
 }
 ```
 
-### 2. Modify simple_switch.cpp
+## 2. Modify simple_switch.cpp
 
 Let's move to the folder containing simple_switch source file (where we also added the extern source).
 
@@ -126,7 +87,7 @@ import_primitives(); // already there
 import_custom_extern(); // to be added
 ```
 
-### 3. Modify Makefile.am
+## 3. Modify Makefile.am
 Stay in the same path and modify the Makefile.am file, around line 11, adding the reference to the cpp file we just added
 
 ```am
@@ -139,14 +100,14 @@ Now let's call make on this folder (bmv2/targets/simple_switch) to make our chan
 sudo make -j4
 ```
 
-### 4. Compile and install again bmv2
+## 4. Compile and install again bmv2
 ```bash
 cd bmv2
 sudo make -j4
 sudo make install
 ```
 
-### 5. Into the p4 application
+## 5. Into the p4 application
 Now you can easily use your extern into any p4 application. Just declare the extern at the beginning of your code (along with the headers declaration)
 
 ```p4
@@ -175,7 +136,7 @@ apply {
 ...
 ```
 
-### 6. Compile the application
+## 6. Compile the application
 Now you can obtain the JSON of your application by simply compiling it by means of p4c-bm2-ss
 ```bash
 p4c-bm2-ss myapp.p4 -o myapp.json
