@@ -1,10 +1,21 @@
 # ML routing
 
 ## Table of contents
+- [Overview](#overview)
 - [Directories summary](#directories-summary)
 - [How to install](#how-to-install)
 
+## Overview
+This repository contains a Reinforcement Learning solution to the problem of **routing**.
+
+**ML Router** is the result of the interaction between a P4 and a Python program, both running on each device to concur in evaluating optimal routes according to data collected by the network.
+
+The repository also contains an example which can be run thanks to some tools (e.g., mininet, p4-utils) that make it possible to emulate a network composed by 8 routers and 4 hosts.
+
 ## Directories summary
+
+### MLRouter
+Contains the toy example of the implementation.
 
 ### Behavioral Model (bmv2)
 This is the second version of the reference P4 software switch, nicknamed bmv2 (for behavioral model version 2). The software switch is written in C++11. It takes as input a JSON file generated from your P4 program by a P4 compiler and interprets it to implement the packet-processing behavior specified by that P4 program.
@@ -18,7 +29,7 @@ Folder containing **instructions for installing the repository** and a guide to 
 p4c is a reference compiler for the P4 programming language. It's been modified to support custom extern implementation basing on [this repository](https://github.com/engjefersonsantiago/p4-programs).
 
 ### Reinforcement Learning (rl)
-Directory in charge of storing all the code relative to the interaction with baselines.
+Directory in charge of storing all the code relative to the interaction with baselines, guide to its installation and to gym-custom-environments creation. Also the implementation of the Network Environment created to interact with baselines is there.
 
 ## How to install
 
@@ -47,4 +58,3 @@ sudo make install
 cd p4c-bmv2
 pip install -r requirements_v1_1.txt
 ```
-
